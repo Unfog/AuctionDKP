@@ -12,8 +12,61 @@ mysql_
 
 class listcharacters extends page_generic {
 	
+    //events with successfull operation with lots 1..99
+    const LOG_LOT_OPEN                                              = 1;
+    const LOG_LOT_CLOSE_BY_TIME                                     = 2;
+    const LOG_LOT_CLOSE_BY_USER                                     = 3;
+    const LOG_LOT_DELETE                                            = 4;
+    const LOG_LOT_UDDATE_BY_BET_NEAR_END_TIME                       = 5;
+    const LOG_LOT_SEND                                              = 6;
+    const LOG_LOT_FAKE_BY_TIME                                      = 7;
+    const LOG_LOT_FAKE_BY_USER                                      = 8;
+    const LOG_LOT_NEW_BET_BY_USER                                   = 9;
+    
+    //events with wrong auth data 100..199
+    const LOG_EVENT_TRY_OPEN_LOT_BY_NOT_ADMIN                       = 100;
+    const LOG_EVENT_TRY_DELETE_LOT_BY_NOT_ADMIN                     = 101;
+    const LOG_EVENT_TRY_SEND_LOT_BY_NOT_ADMIN                       = 102;
+    const LOG_EVENT_TRY_CLOSE_LOT_BY_NOT_ADMIN                      = 103;
+    const LOG_EVENT_TRY_NEW_BET_BY_NOT_USER                         = 104;
+    
+    //events by admin error 200..299
+    const LOG_ERROR_ADMIN_LOT_OPEN_NAME_NULL                        = 201;
+    const LOG_ERROR_ADMIN_LOT_OPEN_MIN_BET_INVALID                  = 202;
+    const LOG_ERROR_ADMIN_LOT_OPEN_STEP_BET_INVALID                 = 203;
+    const LOG_ERROR_ADMIN_LOT_OPEN_END_TIME_INVALID                 = 204;
+    const LOG_ERROR_ADMIN_LOT_OPEN_UPLOAD_FILE_FAIL                 = 205;
+    
+    const LOG_ERROR_ADMIN_LOT_DELETE_LOT_ID_INVALID                 = 206;
+    const LOG_ERROR_ADMIN_LOT_DELETE_LOT_ID_NOT_FOUND               = 207;
+    const LOG_ERROR_ADMIN_LOT_DELETE_LOT_NOT_OPEN                   = 208;
+    
+    const LOG_ERROR_ADMIN_LOT_SEND_LOT_ID_INVALID                   = 209;    
+    const LOG_ERROR_ADMIN_LOT_SEND_LOT_ID_NOT_FOUND                 = 210;
+    const LOG_ERROR_ADMIN_LOT_SEND_LOT_NOT_CLOSE                    = 211;
+    
+    const LOG_ERROR_ADMIN_LOT_CLOSE_LOT_ID_INVALID                  = 212;    
+    const LOG_ERROR_ADMIN_LOT_CLOSE_LOT_ID_NOT_FOUND                = 213;
+    const LOG_ERROR_ADMIN_LOT_CLOSE_LOT_NOT_OPEN                    = 214;
+    
+    //events by user error 300..399
+    const LOG_ERROR_USER_NEW_BET_LOT_ID_INVALID                     = 301;    
+    const LOG_ERROR_USER_NEW_BET_LOT_ID_NOT_FOUND                   = 302;
+    const LOG_ERROR_USER_NEW_BET_LOT_NOT_OPEN                       = 303;
+    const LOG_ERROR_USER_NEW_BET_SMALL_THAN_MIN                     = 304;
+    const LOG_ERROR_USER_NEW_BET_NOT_MOD_STEP                       = 305;
+    const LOG_ERROR_USER_NEW_BET_NO_CHAR                            = 306;
+    const LOG_ERROR_USER_NEW_BET_HAVE_NOT_DKP                       = 307;
+    const LOG_ERROR_USER_NEW_BET_SMALL_THAN_MAX                     = 308;
+    const LOG_ERROR_USER_NEW_BET_VALUE_INVALID                     = 309; 
+    
+    const LOG_ERROR_USER_VIEW_LOT_ID_NOT_INVALID                    = 310;
+    const LOG_ERROR_USER_VIEW_LOT_ID_NOT_FOUND                      = 311;
+	
+	
+	
 	public static function __shortcuts() {
-		$shortcuts = array('user', 'tpl', 'in', 'pdh', 'game', 'config', 'core', 'db');
+		$shortcuts = array('user', 'tpl', 'in', 'pdh', 'game', 'config', 'core', 'db', 'pdc');
 		return array_merge(parent::$shortcuts, $shortcuts);
 	}
 
@@ -62,23 +115,44 @@ class listcharacters extends page_generic {
 		while($row = $this->db->fetch_row($res,true))
 		{
 			array_push($open_lots, $row['lot_id']);
-			
+			//$current_time[0] += 10 * 24 *3600;
 			if($row['end_time'] < $current_time[0])
 			{
 				$max_bet = $max_bets[$row['lot_id']];
 				$query = "";
+                $log_string =   '\'lot_id: `'.$row['lot_id'].
+                                '`, item_name: `'.$row['item_name'].
+                                '`, max_bet: `'.$max_bet['value'].
+                                '`, member_id: `'.$max_bet['member_id'].
+                                '`, end_date: `'.date('d-m-y H:i:s', $current_time[0]).
+                                '`\'';
 				if(is_array($max_bet))
 				{
 					$query = "update __auction_main set status=1 where lot_id=".$row['lot_id'];
-					$retu = $this->pdh->put('item', 'add_item', array($row['item_name'], $max_bet['member_id'], false, $row['lot_id'], $max_bet['value'], 2, $row['end_time']));
+					//$retu = $this->pdh->put('item', 'add_item', array($row['item_name'], $max_bet['member_id'], false, $row['lot_id'], $max_bet['value'], 2, $row['end_time']));
 						
+                        
+                    $this->pdh->put('item', 'add_item', 
+												array(
+														$row['item_name'],
+														$max_bet['member_id'], 
+														false, 
+														$row['lot_id'], 
+														$max_bet['value'], 
+														2, 
+														$row['end_time']));
 					//$this->Show_message('Лот закрыт!', 'Успешно', 'green');
+                    
+		
+                    $this->Log_add_event(self::LOG_LOT_CLOSE_BY_TIME , $current_time[0], $user_id, $log_string);
 				}
 				else
 				{
 					$query = "update __auction_main set status=3 where lot_id=".$row['lot_id'];
+                    $this->Log_add_event(self::LOG_LOT_FAKE_BY_TIME , $current_time[0], $user_id,  $log_string);
 				}
 				$this->db->query($query);
+                $this->pdc->cleanup();
 			}
 			
 		}
@@ -109,6 +183,7 @@ class listcharacters extends page_generic {
 			if(! $is_user_admin)
 			{
 				$this->Show_message('Доступно только администраторам!', 'Ошибка', 'red');
+                $this->Log_add_event(self::LOG_EVENT_TRY_OPEN_LOT_BY_NOT_ADMIN , $current_time[0], $user_id);
 			}
 			else
 			{
@@ -121,6 +196,7 @@ class listcharacters extends page_generic {
 			if(! $is_user_admin)
 			{
 				$this->Show_message('Доступно только администраторам!', 'Ошибка', 'red');
+                $this->Log_add_event(self::LOG_EVENT_TRY_OPEN_LOT_BY_NOT_ADMIN , $current_time[0], $user_id);
 			}
 			else
 			{
@@ -130,27 +206,38 @@ class listcharacters extends page_generic {
 				$post_days_to_end = $this->in->get('days_to_end','');
 				$post_step_bet = $this->in->get('step_bet','');
 
-				
+                $end_time = 0;
+                if( preg_match("/^[0-9]+$/", $post_days_to_end))
+				{
+                    $end_time =  $current_time[0] - ($current_time[0] % 86400) - 4 * 60 * 60;//is it true?;
+                    $end_time += $post_days_to_end * 86400;
+                    $end_time += 21 * 60 * 60;
+                }
+				$log_string = 'item_name: `'.$post_item_name.'`, min_bet: `'.$post_min_bet.'`, end_date: `'.date('d-m-y H:i:s', $end_time).'`, step_bet: `'.$post_step_bet.'`\'';
 		
 				$is_error = false;
 				if($post_item_name == '')
 				{
 					$this->Show_message('Название предмета не должно быть пустым!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_OPEN_NAME_NULL , $current_time[0], $user_id, '\''.$log_string);
 					$is_error = true;
 				}
 				if( !preg_match("/^[0-9]+$/", $post_min_bet))
 				{
 					$this->Show_message('Минимальная ставка не должна быть пустой и должна быть числом!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_OPEN_MIN_BET_INVALID , $current_time[0], $user_id, '\''.$log_string);
 					$is_error = true;
 				}
 				if( !preg_match("/^[0-9]+$/", $post_step_bet))
 				{
 					$this->Show_message('Шаг ставки не должен быть пустым и должен быть числом!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_OPEN_STEP_BET_INVALID , $current_time[0], $user_id, '\''.$log_string);
 					$is_error = true;
 				}
 				if( !preg_match("/^[0-9]+$/", $post_days_to_end))
 				{
 					$this->Show_message('Дата окончания аукциона не должна быть пустой и должна быть числом!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_OPEN_END_TIME_INVALID , $current_time[0], $user_id, '\''.$log_string);
 					$is_error = true;
 				}
 				
@@ -163,11 +250,7 @@ class listcharacters extends page_generic {
 				else
 				{
 					
-					$current_time = getdate();
-	
-					$end_time =  $current_time[0] - ($current_time[0] % 86400) - 4 * 60 * 60;//is it true?;
-					$end_time += $post_days_to_end * 86400;
-					$end_time += 21 * 60 * 60;
+					
 					
 					$query = "INSERT INTO __auction_main (item_name, started_by_user_id, start_time, end_time, min_bet, step_bet, status) 
 						VALUES('$post_item_name', $user_id, $current_time[0], $end_time, $post_min_bet, $post_step_bet, 0)"; 
@@ -185,9 +268,12 @@ class listcharacters extends page_generic {
 						if(! move_uploaded_file($_FILES['item_image']['tmp_name'], $uploadfile))
 						{
 							$this->Show_message('Не удалось загрузить избражение!'.$uploadfile, 'Ошибка', 'red');
+                            $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_OPEN_UPLOAD_FILE_FAIL , $current_time[0], $user_id, $log_string);
 						}
 					}
 					$this->Show_message('Лот создан.', 'Успешно', 'green');
+                    $log_string = '\'lot_id: `'.$row['lot_id'].'`, '.$log_string;
+                    $this->Log_add_event(self::LOG_LOT_OPEN , $current_time[0], $user_id, $log_string);
 				}
 			}
 		}
@@ -197,22 +283,27 @@ class listcharacters extends page_generic {
 			if(! $is_user_admin)
 			{
 				$this->Show_message('Доступно только администраторам!', 'Ошибка', 'red');
+                $this->Log_add_event(self::LOG_EVENT_TRY_DELETE_LOT_BY_NOT_ADMIN , $current_time[0], $user_id);
 			}
 			else
 			{
+                $log_string =   '\'lot_id: `'.$post_lot_id.'`\'';
 				if( $post_lot_id == '')
 				{
 					$this->Show_message('Лот не выбран!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_DELETE_LOT_ID_INVALID , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if($sql_post_lot_id_info == -1)
 				{
 					$this->Show_message('Лот не найден!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_DELETE_LOT_ID_NOT_FOUND , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if($sql_post_lot_id_info['status'] != 0)
 				{
 					$this->Show_message('Лот не открыт!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_DELETE_LOT_NOT_OPEN , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if(!$is_error)
@@ -220,6 +311,7 @@ class listcharacters extends page_generic {
 					$query = "UPDATE __auction_main SET status=2 WHERE lot_id=".$post_lot_id;
 					$this->db->query($query);
 					$this->Show_message('Лот удален!', 'Успешно', 'red');
+                    $this->Log_add_event(self::LOG_LOT_DELETE , $current_time[0], $user_id, $log_string);
 				}
 			}
 		}
@@ -229,22 +321,27 @@ class listcharacters extends page_generic {
 			if(! $is_user_admin)
 			{
 				$this->Show_message('Доступно только администраторам!', 'Ошибка', 'red');
+                $this->Log_add_event(self::LOG_EVENT_TRY_SEND_LOT_BY_NOT_ADMIN , $current_time[0], $user_id);
 			}
 			else
 			{
+                $log_string =   '\'lot_id: `'.$post_lot_id.'`\'';
 				if( $post_lot_id == '')
 				{
 					$this->Show_message('Лот не выбран!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_SEND_LOT_ID_INVALID , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if($sql_post_lot_id_info == -1)
 				{
 					$this->Show_message('Лот не найден!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_SEND_LOT_ID_NOT_FOUND , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if($sql_post_lot_id_info['status'] != 1)
 				{
 					$this->Show_message('Лот не закрыт!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_SEND_LOT_NOT_CLOSE , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if(!$is_error)
@@ -252,6 +349,7 @@ class listcharacters extends page_generic {
 					$query = "UPDATE __auction_main SET status=4 WHERE lot_id=".$post_lot_id;
 					$this->db->query($query);
 					$this->Show_message('Вещь выслана победителю!', 'Успешно', 'green');
+                    $this->Log_add_event(self::LOG_LOT_SEND , $current_time[0], $user_id, $log_string);
 				}
 			}
 		}
@@ -261,12 +359,15 @@ class listcharacters extends page_generic {
 			if(! $is_user_admin)
 			{
 				$this->Show_message('Доступно только администраторам!', 'Ошибка', 'red');
+                $this->Log_add_event(self::LOG_EVENT_TRY_CLOSE_LOT_BY_NOT_ADMIN , $current_time[0], $user_id);
 			}
 			else
 			{
+                $log_string =   '\'lot_id: `'.$post_lot_id.'`\'';
 				if( $post_lot_id == '')
 				{
 					$this->Show_message('Лот не выбран!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_CLOSE_LOT_ID_INVALID , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 			
@@ -274,11 +375,13 @@ class listcharacters extends page_generic {
 				if($sql_post_lot_id_info == -1)
 				{
 					$this->Show_message('Лот не найден!'.$post_lot_id, 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_CLOSE_LOT_ID_NOT_FOUND , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if($sql_post_lot_id_info['status'] != 0)
 				{
 					$this->Show_message('Лот не открыт!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_CLOSE_LOT_NOT_OPEN , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if(!$is_error)
@@ -299,13 +402,21 @@ class listcharacters extends page_generic {
 														$max_bet['value'], 
 														2, 
 														$sql_post_lot_id_info['end_time']));
-						
+						$log_string =   '\'lot_id: `'.$post_lot_id.
+                                        '`, item_name: `'.$sql_post_lot_id_info['item_name'].
+                                        '`, max_bet: `'.$max_bet['value'].
+                                        '`, member_id: `'.$max_bet['member_id'].'`\'';
+                        $this->Log_add_event(self::LOG_LOT_CLOSE_BY_USER , $current_time[0], $user_id, $log_string);               
+                                      
 					}
 					else
 					{
 						$query = "UPDATE __auction_main SET status=3 WHERE lot_id=".$row['lot_id'];
+                        $log_string =   '\'lot_id: `'.$post_lot_id.'`\'';
+                        $this->Log_add_event(self::LOG_LOT_FAKE_BY_USER , $current_time[0], $user_id, $log_string);
 					}
 					$this->db->query($query);
+                    $this->pdc->cleanup();
 					$this->Show_message('Лот закрыт!', 'Успешно', 'green');
 				}
 			}
@@ -316,58 +427,78 @@ class listcharacters extends page_generic {
 			if(! $is_user_char)
 			{
 				$this->Show_message('Вы не авторизованы!', 'Ошибка', 'red');
+                $this->Log_add_event(self::LOG_EVENT_TRY_NEW_BET_BY_NOT_USER , $current_time[0], $user_id);
 			}
 			else
 			{
 				$post_new_bet_value = $this->in->get('new_bet_value','');
 				//$post_member_id = $this->in->get('member_id','');
 				$post_member_id = $this->Get_user_mainchar($user_id);
+                $max_bet = $max_bets[$post_lot_id];
+                
+                $log_string =   '\'lot_id: `'.$post_lot_id.
+                                '`, bet: `'.$post_new_bet_value.
+                                '`, min_bet: `'.$sql_post_lot_id_info['min_bet'].
+                                '`, max_bet: `'.$max_bet['value'].
+                                '`, member_id: `'.$post_member_id.
+                                '`, member_dkp_free: `'.($this->Get_current_points($post_member_id) - $member_dkp_block).
+                                '`\'';
+                
 				$is_error = false;
 				if( !preg_match("/^[0-9]+$/", $post_new_bet_value))
 				{
 					$this->Show_message('Ставка не должна быть пустой и должна быть числом!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_VALUE_INVALID , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if( $post_lot_id == '')
 				{
 					$this->Show_message('Лот не выбран!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_LOT_ID_INVALID , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				
 				if($sql_post_lot_id_info == -1)
 				{
 					$this->Show_message('Лот не найден!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_LOT_ID_NOT_FOUND , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if($sql_post_lot_id_info['status'] != 0)
 				{
 					$this->Show_message('Лот закрыт!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_LOT_NOT_OPEN , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if($post_new_bet_value < $sql_post_lot_id_info['min_bet'])
 				{
 					$this->Show_message('Ставка меньше минимальной!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_SEND_LOT_NOT_CLOSE , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if($post_new_bet_value % $sql_post_lot_id_info['step_bet'] != 0)
 				{
 					$this->Show_message('Ставка должна быть кратна '.$sql_post_lot_id_info['step_bet'].'!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_SMALL_THAN_MIN , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if($post_member_id == '')
 				{
 					$this->Show_message('Не выбран персонаж!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_NO_CHAR , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if($this->Get_current_points($post_member_id) - $member_dkp_block < $post_new_bet_value)
 				{
 					$this->Show_message('У вас нету столько ДКП!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_HAVE_NOT_DKP , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
-				$max_bet = $max_bets[$post_lot_id];
+				
 				if($max_bet['value'] > $post_new_bet_value)
 				{
 					$this->Show_message('Ваша ставка меньше максимальной!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_SMALL_THAN_MAX , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if(!$is_error)
@@ -378,6 +509,7 @@ class listcharacters extends page_generic {
 						$new_end_time = $current_time[0] + 10 * 60;
 						$query = "UPDATE __auction_main SET end_time=".$new_end_time." WHERE lot_id=".$sql_post_lot_id_info['lot_id'];
 						$this->db->query($query);
+                        $this->Log_add_event(self::LOG_LOT_UDDATE_BY_BET_NEAR_END_TIME , $current_time[0], $user_id, $log_string);
 					}
 				
 					//$member = $this->Get_member_name($user_id, $post_member_id);
@@ -390,6 +522,7 @@ class listcharacters extends page_generic {
 					$this->db->query($query);
 									
 					$this->Show_message('Ставка успено сделана!', 'Успешно', 'green');
+                    $this->Log_add_event(self::LOG_LOT_NEW_BET_BY_USER , $current_time[0], $user_id, $log_string);
 					
 					// for view "My bets"
 					$action_name = '';
@@ -410,12 +543,14 @@ class listcharacters extends page_generic {
 			if( $post_lot_id == '')
 			{
 				$this->Show_message('Лот не выбран!', 'Ошибка', 'red');
+                $this->Log_add_event(self::LOG_ERROR_USER_VIEW_LOT_ID_NOT_INVALID , $current_time[0], $user_id);
 			}
 				
 			if($sql_post_lot_id_info == -1)
 			{
 				$err = '<br>Лот не найден!';
 				$message = array('title' => 'Ошибка', 'text' => $err, 'color' => 'red');
+                $this->Log_add_event(self::LOG_ERROR_USER_VIEW_LOT_ID_NOT_FOUND , $current_time[0], $user_id);
 				$this->pdh->process_hook_queue();
 				$this->core->messages($message);
 			}
@@ -604,6 +739,44 @@ class listcharacters extends page_generic {
 			
 			$page .= '<br><br><br>';
 		}
+        
+        if($action_name == 'log_view')
+        {
+            $query = "SELECT * FROM __auction_log ORDER BY log_id DESC";
+            $res = $this->db->query($query);
+            
+            $page .= '
+                    <br><br>
+					<table width="100%" border="0" cellspacing="1" cellpadding="2" class="colorswitch">
+						<tr >
+							<th colspan="7" align="left" class="nowrap">Лог</th>
+						</tr>
+						<tr>
+							<th >Дата</th>
+							<th >Логин</th>
+							<th >Событие</th>
+                            <th>Описание</th>
+						</tr>
+					';
+            
+            while ($row=$this->db->fetch_row($res,true)) 
+            { 
+                $date = date('d-m-y H:i:s', $row['date']);
+                
+        
+                $page .= '<tr>';
+                $page .= '<td>'.$date.'</td>';	
+                $page .= '<td>'.$row['user_id'].'</td>';	
+                $page .= '<td>'.$this->Log_text($row['event']).'</td>';	
+                $page .= '<td>'.$row['description'].'</td>';
+                $page .= '</tr>';
+             
+                
+                
+            }
+            $page .= '</table><br><br>';
+            $this->db->free_result($res);
+        }
 		
 		// user panel
 		if ($is_user_char){
@@ -673,17 +846,19 @@ class listcharacters extends page_generic {
 				<fieldset class="settings smallsettings">
 				<legend>Панель администратора</legend>
 					<dl>
+                    <div style="float:left;">
 						<form method="post" action="./auction.php" name="post">
 							<input type="submit" name="button" value="Создать новый лот" class="mainoption bi_new" />
 							<input type="hidden" name="action_name" value="create_new_auc_page" class="input" />
 						</form>
+                     </div>  
 					
 				';
 			
 			if($action_name == 'view_lot')
 			{
-				 $admin_panel .='
-						
+				$admin_panel .='
+                    
 						<form method="post" action="./auction.php" name="post">
 							<input type="submit" name="button" value="Закрыть лот" class="mainoption bi_ok" />
 							<input type="hidden" name="action_name" value="close_lot" class="input" />
@@ -701,9 +876,19 @@ class listcharacters extends page_generic {
 							<input type="hidden" name="action_name" value="item_send" class="input" />
 							<input type="hidden" name="lot_id" value="'.$post_lot_id.'" class="input" />
 						</form>
-						
-					';
-			}			
+                    
+                    
+                ';
+			}	
+
+            $admin_panel .= '
+                    <div style="float:right;">
+                        <form method="post" action="./auction.php" name="post">
+							<input type="submit" name="button" value="Лог" class="mainoption" />
+							<input type="hidden" name="action_name" value="log_view" class="input" />
+						</form>
+                    </div>
+                ';
 			
 			$admin_panel .= '</dl></fieldset>';
 			
@@ -715,7 +900,7 @@ class listcharacters extends page_generic {
 		$page .= '<br><br>';
 		//$page .= 'Memory by page: '.memory_get_usage();
 	
-		$page .= "<br><br><br><div align=center>Auction DKP 0.1 by Unfog</div>";
+		$page .= "<br><br><br><div align=center>Auction DKP 0.1.1 by Unfog</div>";
 		
 		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		
@@ -728,7 +913,7 @@ class listcharacters extends page_generic {
 		//$debug = print_r($member_dkp_block ,true);
 		//$bets = $this->pdh->get('member', 'mainchar', array($user_id)); 
 		
-		//$debug .= print_r($member_dkp_block ,true);
+		$debug .= print_r($this->pdh->get('itempool', 'id_list') ,true);
 	
 		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		$this->tpl->assign_vars(array (
@@ -928,6 +1113,17 @@ class listcharacters extends page_generic {
 			)
 		";
 		$this->db->query($query);
+        
+        $query = "create table IF NOT EXISTS __auction_log 
+			(
+				log_id 				int 			unsigned not null auto_increment,
+				user_id 			int 			unsigned not null,
+				date 				int 			unsigned not null,
+				event 				int 			unsigned not null,
+				primary key (log_id)
+			)
+		";
+		$this->db->query($query);
 		
 	}
 	
@@ -1054,6 +1250,84 @@ class listcharacters extends page_generic {
 		}
 		return $view_list;
 	}
+    
+    // log operation
+    // extract into new class
+    private function Log_add_event($_event, $_time, $_user_id, $_description = false)
+    {
+        if($_user_id == false) $_user_id = 0;
+        if($_description == false) $_description = "";
+        if($_time == false)
+        {       
+            $current_time = getdate();
+            $_time = $current_time[0];
+        }
+        if($_event == false) $_event = 0;
+        
+        $query = "INSERT INTO __auction_log 
+            (user_id, date, event, description)
+            VALUES($_user_id, $_time, $_event, $_description)"; 
+        $this->db->query($query);
+    }
+    
+    private function Log_text($_log_id)
+    {
+        $result = 'UNKNOWN EVENT';
+        switch($_log_id)
+        {
+            case self::LOG_LOT_OPEN                                 : $result = 'Лот открыт'; break;        
+            case self::LOG_LOT_CLOSE_BY_TIME                        : $result = 'Лот закрыт по времени'; break;        
+            case self::LOG_LOT_CLOSE_BY_USER                        : $result = 'Лот закрыт админом'; break;        
+            case self::LOG_LOT_DELETE                               : $result = 'Лот удален'; break;        
+            case self::LOG_LOT_UDDATE_BY_BET_NEAR_END_TIME          : $result = 'Дата окончания лота обновлена из-за ставки'; break;        
+            case self::LOG_LOT_SEND                                 : $result = 'Лот отправлен'; break;        
+            case self::LOG_LOT_FAKE_BY_TIME                         : $result = 'Лот провалился по времени'; break;        
+            case self::LOG_LOT_FAKE_BY_USER                         : $result = 'Лот провалился админом'; break;        
+            case self::LOG_LOT_NEW_BET_BY_USER                      : $result = 'Сделана ставка'; break;        
+                                                               
+            //events with wrong auth data 100..199             
+            case self::LOG_EVENT_TRY_OPEN_LOT_BY_NOT_ADMIN          : $result = 'Попытка открыть лот не админом'; break;        
+            case self::LOG_EVENT_TRY_DELETE_LOT_BY_NOT_ADMIN        : $result = 'Попытка удалить лот не админом '; break;        
+            case self::LOG_EVENT_TRY_SEND_LOT_BY_NOT_ADMIN          : $result = 'Попытка отправить лот не админом'; break;        
+            case self::LOG_EVENT_TRY_CLOSE_LOT_BY_NOT_ADMIN         : $result = 'Попытка закрыть лот не админом'; break;        
+            case self::LOG_EVENT_TRY_NEW_BET_BY_NOT_USER            : $result = 'Попытка сдалать ставке не пользователем'; break;        
+                                                               
+            //events by admin error 200..299                  
+            case self::LOG_ERROR_ADMIN_LOT_OPEN_NAME_NULL           : $result = 'При открытии лота имя лота пустое'; break;        
+            case self::LOG_ERROR_ADMIN_LOT_OPEN_MIN_BET_INVALID     : $result = 'При открытии лота минимальная ставка не достоверна'; break;        
+            case self::LOG_ERROR_ADMIN_LOT_OPEN_STEP_BET_INVALID    : $result = 'При открытии лота шаг ставки не достоверен'; break;        
+            case self::LOG_ERROR_ADMIN_LOT_OPEN_END_TIME_INVALID    : $result = 'При открытии лота дата окончания не достоверна'; break;        
+            case self::LOG_ERROR_ADMIN_LOT_OPEN_UPLOAD_FILE_FAIL    : $result = 'При открытии лота не удалось загрузить файл'; break;        
+                                                          
+            case self::LOG_ERROR_ADMIN_LOT_DELETE_LOT_ID_INVALID    : $result = 'При удалении лота ИД лота не достоверно'; break;        
+            case self::LOG_ERROR_ADMIN_LOT_DELETE_LOT_ID_NOT_FOUND  : $result = 'При удалении лота он не найден'; break;        
+            case self::LOG_ERROR_ADMIN_LOT_DELETE_LOT_NOT_OPEN      : $result = 'При удалении лота он не открыт'; break;        
+                                                           
+            case self::LOG_ERROR_ADMIN_LOT_SEND_LOT_ID_INVALID      : $result = 'При отправке лота ИД лота не достоверно'; break;        
+            case self::LOG_ERROR_ADMIN_LOT_SEND_LOT_ID_NOT_FOUND    : $result = 'При отправке лота он не найден'; break;        
+            case self::LOG_ERROR_ADMIN_LOT_SEND_LOT_NOT_CLOSE       : $result = 'При отправке лота он не закрыт'; break;        
+                                                        
+            case self::LOG_ERROR_ADMIN_LOT_CLOSE_LOT_ID_INVALID     : $result = 'При закрытии лота ИД лота не достоверно'; break;     
+            case self::LOG_ERROR_ADMIN_LOT_CLOSE_LOT_ID_NOT_FOUND   : $result = 'При закрытии лота он не найден'; break;           
+            case self::LOG_ERROR_ADMIN_LOT_CLOSE_LOT_NOT_OPEN       : $result = 'При закрытии лота он не открыт'; break;           
+                                                               
+            //events by user error 300..399                  
+            case self::LOG_ERROR_USER_NEW_BET_LOT_ID_INVALID        : $result = 'При попытке новой ставки ИД лота не достоверно'; break;        
+            case self::LOG_ERROR_USER_NEW_BET_LOT_ID_NOT_FOUND      : $result = 'При попытке новой ставки лот не найден'; break;        
+            case self::LOG_ERROR_USER_NEW_BET_LOT_NOT_OPEN          : $result = 'При попытке новой ставки дот не открыт'; break;        
+            case self::LOG_ERROR_USER_NEW_BET_SMALL_THAN_MIN        : $result = 'При попытке новой ставки она меньше минимальной'; break;        
+            case self::LOG_ERROR_USER_NEW_BET_NOT_MOD_STEP          : $result = 'При попытке новой ставки она не кратана шагу'; break;        
+            case self::LOG_ERROR_USER_NEW_BET_NO_CHAR               : $result = 'При попытке новой ставки у пользователя нету чара'; break;        
+            case self::LOG_ERROR_USER_NEW_BET_HAVE_NOT_DKP          : $result = 'При попытке новой ставки не хватает ДКП'; break;        
+            case self::LOG_ERROR_USER_NEW_BET_SMALL_THAN_MAX        : $result = 'При попытке новой ставки она меньше максимальной'; break;        
+            case self::LOG_ERROR_USER_NEW_BET_VALUE_INVALID         : $result = 'При попытке новой ставки она не достоверна'; break;        
+                  
+            case self::LOG_ERROR_USER_VIEW_LOT_ID_NOT_INVALID       : $result = 'При просмотре лота ИД лота не достоверно'; break;        
+            case self::LOG_ERROR_USER_VIEW_LOT_ID_NOT_FOUND         : $result = 'При просмотре лота лот не найден'; break;        
+        }
+        //$result = $_log_id;
+        return $result;
+    }
 }
 if(version_compare(PHP_VERSION, '5.3.0', '<')) registry::add_const('short_listcharacters', listcharacters::__shortcuts());
 registry::register('listcharacters');
