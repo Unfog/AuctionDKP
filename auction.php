@@ -29,6 +29,7 @@ class listcharacters extends page_generic {
     const LOG_EVENT_TRY_SEND_LOT_BY_NOT_ADMIN                       = 102;
     const LOG_EVENT_TRY_CLOSE_LOT_BY_NOT_ADMIN                      = 103;
     const LOG_EVENT_TRY_NEW_BET_BY_NOT_USER                         = 104;
+    const LOG_EVENT_TRY_EDIT_ITEM_BY_NOT_ADMIN                      = 105;
     
     //events by admin error 200..299
     const LOG_ERROR_ADMIN_LOT_OPEN_NAME_NULL                        = 201;
@@ -123,7 +124,7 @@ class listcharacters extends page_generic {
                 $log_string =   '\'lot_id: `'.$row['lot_id'].
                                 '`, item_name: `'.$row['item_name'].
                                 '`, max_bet: `'.$max_bet['value'].
-                                '`, member_id: `'.$max_bet['member_id'].
+                                '`, member: `'.$max_bet['member'].
                                 '`, end_date: `'.date('d-m-y H:i:s', $current_time[0]).
                                 '`\'';
 				if(is_array($max_bet))
@@ -137,9 +138,9 @@ class listcharacters extends page_generic {
 														$row['item_name'],
 														$max_bet['member_id'], 
 														false, 
-														$row['lot_id'], 
+														'', //here was lot_id
 														$max_bet['value'], 
-														2, 
+														1, 
 														$row['end_time']));
 					//$this->Show_message('Лот закрыт!', 'Успешно', 'green');
                     
@@ -201,18 +202,27 @@ class listcharacters extends page_generic {
 			else
 			{
 				$is_need_date = true;
-				$post_item_name = $this->in->get('item_name','');
+				$post_item_name = $this->in->get('name','');
 				$post_min_bet = $this->in->get('min_bet','');
-				$post_days_to_end = $this->in->get('days_to_end','');
+				$post_end_date = $this->in->get('days_to_end','');
 				$post_step_bet = $this->in->get('step_bet','');
 
-                $end_time = 0;
-                if( preg_match("/^[0-9]+$/", $post_days_to_end))
+                $post_date_end = $this->in->get('date','');
+                $post_date_end_save = $post_date_end;
+                $post_date_end = preg_replace('/\./', '-', $post_date_end);
+                $current_time = getdate();
+                $sub_year = substr($current_time['year'], 2, 2);
+                $post_date_end = preg_replace('/-'.$sub_year.'/', '-20'.$sub_year, $post_date_end);
+                $post_date_end_sec = strtotime($post_date_end);
+                
+                
+                $end_time = $post_date_end_sec + 21 * 60 * 60;
+                /*if( preg_match("/^[0-9]+$/", $post_end_date))
 				{
-                    $end_time =  $current_time[0] - ($current_time[0] % 86400) - 4 * 60 * 60;//is it true?;
-                    $end_time += $post_days_to_end * 86400;
+                    $end_time =  $post_end_date - ($post_end_date % 86400) - 4 * 60 * 60;//is it true?;
                     $end_time += 21 * 60 * 60;
-                }
+                }*/
+                
 				$log_string = 'item_name: `'.$post_item_name.'`, min_bet: `'.$post_min_bet.'`, end_date: `'.date('d-m-y H:i:s', $end_time).'`, step_bet: `'.$post_step_bet.'`\'';
 		
 				$is_error = false;
@@ -234,7 +244,7 @@ class listcharacters extends page_generic {
                     $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_OPEN_STEP_BET_INVALID , $current_time[0], $user_id, '\''.$log_string);
 					$is_error = true;
 				}
-				if( !preg_match("/^[0-9]+$/", $post_days_to_end))
+				if( !preg_match("/^[0-9]+$/", $end_time))
 				{
 					$this->Show_message('Дата окончания аукциона не должна быть пустой и должна быть числом!', 'Ошибка', 'red');
                     $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_OPEN_END_TIME_INVALID , $current_time[0], $user_id, '\''.$log_string);
@@ -244,7 +254,7 @@ class listcharacters extends page_generic {
 				
 				if($is_error)
 				{
-					$data = array($post_item_name, $post_min_bet, $post_days_to_end, $post_step_bet);
+					$data = array($post_item_name, $post_min_bet, $post_date_end_save, $post_step_bet);
 					$page .= $this->Create_page_create_new_auc_page($data);
 				}
 				else
@@ -260,17 +270,17 @@ class listcharacters extends page_generic {
 					$res = $this->db->query($query);
 					$row = $this->db->fetch_row($res,true);
 					
-					$uploaddir = './item_images/';
+					/*$uploaddir = './item_images/';
 					//$uploadfile = $uploaddir . basename($_FILES['item_image']['name']);
 					$uploadfile = $uploaddir . $row['lot_id'];
 					if($_FILES['item_image']['tmp_name'])
 					{
 						if(! move_uploaded_file($_FILES['item_image']['tmp_name'], $uploadfile))
 						{
-							$this->Show_message('Не удалось загрузить избражение!'.$uploadfile, 'Ошибка', 'red');
+							$this->Show_message('Не удалось загрузить избражение!', 'Ошибка', 'red');
                             $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_OPEN_UPLOAD_FILE_FAIL , $current_time[0], $user_id, $log_string);
 						}
-					}
+					}*/
 					$this->Show_message('Лот создан.', 'Успешно', 'green');
                     $log_string = '\'lot_id: `'.$row['lot_id'].'`, '.$log_string;
                     $this->Log_add_event(self::LOG_LOT_OPEN , $current_time[0], $user_id, $log_string);
@@ -398,14 +408,14 @@ class listcharacters extends page_generic {
 														$sql_post_lot_id_info['item_name'],
 														$max_bet['member_id'], 
 														false, 
-														$sql_post_lot_id_info['lot_id'], 
+														'', //here was lot_id $sql_post_lot_id_info['lot_id'], 
 														$max_bet['value'], 
-														2, 
+														1, 
 														$sql_post_lot_id_info['end_time']));
 						$log_string =   '\'lot_id: `'.$post_lot_id.
                                         '`, item_name: `'.$sql_post_lot_id_info['item_name'].
                                         '`, max_bet: `'.$max_bet['value'].
-                                        '`, member_id: `'.$max_bet['member_id'].'`\'';
+                                        '`, member: `'.$max_bet['member'].'`\'';
                         $this->Log_add_event(self::LOG_LOT_CLOSE_BY_USER , $current_time[0], $user_id, $log_string);               
                                       
 					}
@@ -440,7 +450,7 @@ class listcharacters extends page_generic {
                                 '`, bet: `'.$post_new_bet_value.
                                 '`, min_bet: `'.$sql_post_lot_id_info['min_bet'].
                                 '`, max_bet: `'.$max_bet['value'].
-                                '`, member_id: `'.$post_member_id.
+                                '`, member: `'.$this->Get_member_name($post_member_id).
                                 '`, member_dkp_free: `'.($this->Get_current_points($post_member_id) - $member_dkp_block).
                                 '`\'';
                 
@@ -610,8 +620,8 @@ class listcharacters extends page_generic {
 				$page .= '<td>'.$this->Get_status_text($row['status']).'</td>';	
 				$page .= '</tr>';
 				$page .= '</table>';
-				$lot_id_for_image = $row['lot_id'];
-			
+				$item_name_for_image = $row['item_name'];
+                
 				
 				
 				//
@@ -729,10 +739,13 @@ class listcharacters extends page_generic {
 				$page .= '</table>';
 				$page .= '</div>';
 				
-				if(file_exists('./item_images/'.$lot_id_for_image))
+                
+                $item_id = $this->Get_item_id($item_name_for_image);
+                
+				if(file_exists('./item_images/'.$item_id) && $item_id)
 				{
 					$page .= ' <div style="float:right;">';
-					$page .= '<img src="./item_images/'.$lot_id_for_image.'"/></div>';
+					$page .= '<img src="./item_images/'.$item_id.'"/></div>';
 				}
 				$page .= '<div style=" width:100%; height:1px; clear:both;"></div>';
 			}
@@ -742,6 +755,8 @@ class listcharacters extends page_generic {
         
         if($action_name == 'log_view')
         {
+            
+            
             $query = "SELECT * FROM __auction_log ORDER BY log_id DESC";
             $res = $this->db->query($query);
             
@@ -766,7 +781,7 @@ class listcharacters extends page_generic {
         
                 $page .= '<tr>';
                 $page .= '<td>'.$date.'</td>';	
-                $page .= '<td>'.$row['user_id'].'</td>';	
+                $page .= '<td>'.$this->pdh->get('user','name',array($row['user_id'])).'</td>';	
                 $page .= '<td>'.$this->Log_text($row['event']).'</td>';	
                 $page .= '<td>'.$row['description'].'</td>';
                 $page .= '</tr>';
@@ -776,6 +791,104 @@ class listcharacters extends page_generic {
             }
             $page .= '</table><br><br>';
             $this->db->free_result($res);
+        }
+        
+        if($action_name == 'edit_items')
+        {
+            if(! $is_user_admin)
+			{
+				$this->Show_message('Доступно только администраторам!', 'Ошибка', 'red');
+                $this->Log_add_event(self::LOG_EVENT_TRY_EDIT_ITEM_BY_NOT_ADMIN , $current_time[0], $user_id);
+			}
+            else
+            { 
+                
+                $item_names = $this->Get_items();
+                
+                foreach($item_names as $key => $item_name)
+                {
+                    $page .= '&nbsp&nbsp&nbsp<a href="#" onclick="javascript: document.form_bets'.$key.'.submit()" style="color: '.$color.'">'.$item_name['item_name'].'</a>
+                                <form name="form_bets'.$key.'" action="./auction.php" method="post">
+										<input type="hidden" name="action_name" value="edit_item" />
+										<input type="hidden" name="item_id" value="'.$key.'" />
+								</form>
+                                <br>';
+                                
+                }
+                $page .= '<br><br>';
+            }
+        }
+        if($action_name == 'edit_item')
+        {
+            if(! $is_user_admin)
+			{
+				$this->Show_message('Доступно только администраторам!', 'Ошибка', 'red');
+                $this->Log_add_event(self::LOG_EVENT_TRY_EDIT_ITEM_BY_NOT_ADMIN , $current_time[0], $user_id);
+			}
+            else
+            {
+                $post_item_id = $this->in->get('item_id','');
+                if( $post_item_id == '')
+				{
+					$this->Show_message('Итем не выбран!', 'Ошибка', 'red');
+                    //$this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_LOT_ID_INVALID , $current_time[0], $user_id, $log_string);
+					$is_error = true;
+				}
+                else
+                {
+                    $item_names = $this->Get_items();
+                    $page .= '<br>Редактирование итема<br>';
+                    $page .= '<br>Название итема: '.$item_names[$post_item_id]['item_name'];
+                    
+                    if(file_exists('./item_images/'.$post_item_id))
+                    {
+                        $page .= '<img src="./item_images/'.$post_item_id.'"/>';
+                    }
+                    else
+                    {
+                        $page .= '
+                            <form enctype="multipart/form-data" method="post" action="./auction.php" name="post">
+                                <input type="hidden" name="MAX_FILE_SIZE" value="500000" />
+                                <input name="item_image" type="file" />
+                                <input type="hidden" name="action_name" value="edit_item_add_image" class="input" />
+                                <input type="hidden" name="item_id" value="'.$post_item_id.'" class="input" />
+                                <input type="submit" name="button" value="Добавить изображение" class="mainoption bi_ok" />
+                            </form>
+                        ';
+                    }
+                    
+                    $page .= '<br><br>';
+                }
+                
+            }
+        }
+        
+        if($action_name == 'edit_item_add_image')
+        {
+            if(! $is_user_admin)
+			{
+				$this->Show_message('Доступно только администраторам!', 'Ошибка', 'red');
+                $this->Log_add_event(self::LOG_EVENT_TRY_EDIT_ITEM_BY_NOT_ADMIN , $current_time[0], $user_id);
+			}
+            else
+            {
+                $post_item_id = $this->in->get('item_id','');
+                $uploaddir = './item_images/';
+                //$uploadfile = $uploaddir . basename($_FILES['item_image']['name']);
+                $uploadfile = $uploaddir . $post_item_id;
+                if($_FILES['item_image']['tmp_name'])
+                {
+                    if(! move_uploaded_file($_FILES['item_image']['tmp_name'], $uploadfile))
+                    {
+                        $this->Show_message('Не удалось загрузить избражение!', 'Ошибка', 'red');
+                        $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_OPEN_UPLOAD_FILE_FAIL , $current_time[0], $user_id);
+                    }
+                    else
+                    {
+                        $this->Show_message('Удалось загрузить избражение!', 'Ошибка', 'green');
+                    }
+                }
+            }
         }
 		
 		// user panel
@@ -828,7 +941,6 @@ class listcharacters extends page_generic {
 									</form>
 					';
 				}
-				
 				
 				$user_panel .= '
 							</table>
@@ -884,6 +996,10 @@ class listcharacters extends page_generic {
             $admin_panel .= '
                     <div style="float:right;">
                         <form method="post" action="./auction.php" name="post">
+							<input type="submit" name="button" value="Редактировать итемы" class="mainoption" />
+							<input type="hidden" name="action_name" value="edit_items" class="input" />
+						</form>
+                        <form method="post" action="./auction.php" name="post">
 							<input type="submit" name="button" value="Лог" class="mainoption" />
 							<input type="hidden" name="action_name" value="log_view" class="input" />
 						</form>
@@ -900,7 +1016,7 @@ class listcharacters extends page_generic {
 		$page .= '<br><br>';
 		//$page .= 'Memory by page: '.memory_get_usage();
 	
-		$page .= "<br><br><br><div align=center>Auction DKP 0.1.1 by Unfog</div>";
+		$page .= "<br><br><br><div align=center>Auction DKP 0.1.2 by Unfog</div>";
 		
 		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		
@@ -913,7 +1029,7 @@ class listcharacters extends page_generic {
 		//$debug = print_r($member_dkp_block ,true);
 		//$bets = $this->pdh->get('member', 'mainchar', array($user_id)); 
 		
-		$debug .= print_r($this->pdh->get('itempool', 'id_list') ,true);
+		//$debug .= print_r($this->pdh->get('itempool', 'id_list') ,true);
 	
 		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		$this->tpl->assign_vars(array (
@@ -942,16 +1058,24 @@ class listcharacters extends page_generic {
 	private function Create_page_create_new_auc_page($data = array())
 	{
 	//'.$this->jquery->Calendar('date', $this->time->user_date('23.05.14 00:00', true, false, false, function_exists('date_create_from_format')), '23.05.14 00:00', array('timepicker' => true)).'
-
-		
+        if($data[2] == 0)
+        {
+            $current_time = getdate();
+            $current_time[0] += 7 * 24 * 3600;
+            $current_time = getdate($current_time[0]);
+            $data[2] = $current_time['mday'].'.'.($current_time['mon'] < 10?'0':'').($current_time['mon']).'.'.substr($current_time['year'], 2, 2);
+        }
+		//<input name="item_name" type="text" class="input" value="'.$data[0].'" size="50" id="name" />
+        $item_names = $this->pdh->aget('item', 'name', 0, array($this->pdh->get('item', 'id_list'))); 
 		$result .= '
 		
-		<form enctype="multipart/form-data" method="post" action="./auction.php" name="post">
+        
+		<form method="post" action="./auction.php" name="post">
 			<fieldset class="settings smallsettings">
 			<legend>Создание нового лота</legend>
 				<dl>
 					<dt><label>Название предмета:</label></dt>
-						<dd><input name="item_name" type="text" class="input" value="'.$data[0].'" size="50" id="name" /></dd>
+						<dd><input name="name" type="text" class="input" value="" size="100" id="name" /></dd>
 				</dl>
 				<dl>
 					<dt><label>Минимальная ставка</label></dt>
@@ -962,17 +1086,10 @@ class listcharacters extends page_generic {
 					<dd><input type="text" name="step_bet" value="'.($data[3] == 0 ? 5 : $data[3]).'" class="input" /></dd>
 				</dl>
 				<dl>
-					<dt><label>Аукцион будет закончен в 21:00 на </label></dt>
-					<dd><input type="text" name="days_to_end" value="'.($data[2] == 0 ? 7 : $data[2]).'" class="input" /> день</dd>
+					<dt><label>Аукцион будет закончен в 21:00 </label></dt>
+					<dd>'.$page .= $this->jquery->Calendar('date', $data[2]).'</dd>
 				</dl>
-				<dl>
-					<dt><label>Картинка с итемом (300 кБ макс)</label></dt>
-					<dd>
-						<input type="hidden" name="MAX_FILE_SIZE" value="500000" />
-						<input name="item_image" type="file" />
-					</dd>
-					 
-				</dl>
+				
 				<dl>
 					<input type="submit" name="button" value="Создать лот" class="mainoption bi_ok" />
 				</dl>
@@ -984,6 +1101,18 @@ class listcharacters extends page_generic {
 		</form>
 		
 		';
+        
+        /*
+        <dl>
+					<dt><label>Картинка с итемом (300 кБ макс)</label></dt>
+					<dd>
+						<input type="hidden" name="MAX_FILE_SIZE" value="500000" />
+						<input name="item_image" type="file" />
+					</dd>
+					 
+				</dl>
+        */
+        $result .= $this->jquery->Autocomplete('name', array_unique($item_names));
 		return $result;
 	}
 	
@@ -1132,7 +1261,7 @@ class listcharacters extends page_generic {
 		$query = "SELECT * FROM __auction_main WHERE lot_id='".$_lot_id."'"; 
 
 		$res = $this->db->query($query);
-		if(  $row = $this->db->fetch_row($res,true) )
+		if($row = $this->db->fetch_row($res,true) )
 		{
 			$this->db->free_result($res);
 			return $row;
@@ -1290,7 +1419,8 @@ class listcharacters extends page_generic {
             case self::LOG_EVENT_TRY_DELETE_LOT_BY_NOT_ADMIN        : $result = 'Попытка удалить лот не админом '; break;        
             case self::LOG_EVENT_TRY_SEND_LOT_BY_NOT_ADMIN          : $result = 'Попытка отправить лот не админом'; break;        
             case self::LOG_EVENT_TRY_CLOSE_LOT_BY_NOT_ADMIN         : $result = 'Попытка закрыть лот не админом'; break;        
-            case self::LOG_EVENT_TRY_NEW_BET_BY_NOT_USER            : $result = 'Попытка сдалать ставке не пользователем'; break;        
+            case self::LOG_EVENT_TRY_NEW_BET_BY_NOT_USER            : $result = 'Попытка сделать ставку не пользователем'; break;        
+            case self::LOG_EVENT_TRY_EDIT_ITEM_BY_NOT_ADMIN         : $result = 'Попытка изменить итем не админом'; break;        
                                                                
             //events by admin error 200..299                  
             case self::LOG_ERROR_ADMIN_LOT_OPEN_NAME_NULL           : $result = 'При открытии лота имя лота пустое'; break;        
@@ -1327,6 +1457,36 @@ class listcharacters extends page_generic {
         }
         //$result = $_log_id;
         return $result;
+    }
+    
+    private function Get_items()
+    {
+        $query = "SELECT item_name, MIN( item_id ) AS item_id FROM  __items GROUP BY item_name";
+        $res = $this->db->query($query);
+        $result = array();
+        while ($row = $this->db->fetch_row($res,true)) 
+		{
+            $result[$row['item_id']]['item_name'] = $row['item_name'];
+        }
+        return $result;
+    }
+    
+    private function Get_item_id($_item_name)
+    {
+        
+        $query = "SELECT item_name, min(item_id) as item_id FROM `eqdkp10_items` where item_name='".$_item_name."'"; 
+
+		$res = $this->db->query($query);
+		if($row = $this->db->fetch_row($res,true) )
+		{
+			$this->db->free_result($res);
+			return $row['item_id'];
+		}
+		else
+		{
+			$this->db->free_result($res);
+			return -1;
+		}
     }
 }
 if(version_compare(PHP_VERSION, '5.3.0', '<')) registry::add_const('short_listcharacters', listcharacters::__shortcuts());
