@@ -67,7 +67,7 @@ class listcharacters extends page_generic {
 	
 	
 	public static function __shortcuts() {
-		$shortcuts = array('user', 'tpl', 'in', 'pdh', 'game', 'config', 'core', 'db', 'pdc');
+		$shortcuts = array('user', 'tpl', 'in', 'pdh', 'game', 'config', 'core', 'db', 'pdc', 'pfh');
 		return array_merge(parent::$shortcuts, $shortcuts);
 	}
 
@@ -80,6 +80,10 @@ class listcharacters extends page_generic {
 	}
 
 	public function display(){
+	
+		
+	
+	
 		/*if(isset($options['open'])) {
 			$this->open($this->dbhost, $this->dbname, $this->dbuser, $this->dbpass); */
 			
@@ -91,7 +95,7 @@ class listcharacters extends page_generic {
 		
 		$user_name = isset($this->user->data['username']) ? sanitize($this->user->data['username']) : $this->user->lang('anonymous');
 		$user_id = $this->user->data['user_id'];
-		$page = '<title>Аукцион ДКП</title>';
+		$page = '<meta http-equiv="Cache-Control" content="no-cache">';
 		$err = '';
 		$action_name = $this->in->get('action_name','');
 		
@@ -107,6 +111,9 @@ class listcharacters extends page_generic {
 		// max_bets and $my_bets will be requery when new net was added
 		$max_bets = $this->Get_max_bets();
 		$my_bets = $this->Get_my_bets($user_id);
+		
+		//check folder for image
+		$this->pfh->CheckCreateFolder('./item_images/trumb/');
 		
 		//check all lots for close
 		
@@ -154,6 +161,7 @@ class listcharacters extends page_generic {
 				}
 				$this->db->query($query);
                 $this->pdc->cleanup();
+				//$this->pdc->del('pdh_item_table');
 			}
 			
 		}
@@ -175,9 +183,13 @@ class listcharacters extends page_generic {
 			}
 		}
 		
-		
+		$this->jquery->qtip(".qtip_item","
+				 
+				 return '<img src=\"'+$(this).data('image')+'\">';
+				",array(
+				"contfunc" => true
+			));
 			
-		
 		
 		if($action_name == 'create_new_auc_page')
 		{
@@ -202,36 +214,53 @@ class listcharacters extends page_generic {
 			else
 			{
 				$is_need_date = true;
-				$post_item_name = $this->in->get('name','');
-				$post_min_bet = $this->in->get('min_bet','');
+				foreach($this->in->getArray('name','int') as $buyer){
+					$post_item_selected_id['name'][] = $buyer;
+				}
+				$post_item_id = $post_item_selected_id['name'][0];
+				$items_names = $this->Get_items_names();
+				$post_item_name = $items_names[$post_item_id];
+				
+				//$post_min_bet = $this->in->get('min_bet','');
+				
+				$post_min_bet = $this->Get_item_min_bet($post_item_name);
+				
 				$post_end_date = $this->in->get('days_to_end','');
 				$post_step_bet = $this->in->get('step_bet','');
 
                 $post_date_end = $this->in->get('date','');
+				$format = 'd.m.y H:i:s';
+				$date = DateTime::createFromFormat($format, $post_date_end.' 00:00:00');
+                $post_date_end_sec = $date->format('U');
+				/*
                 $post_date_end_save = $post_date_end;
                 $post_date_end = preg_replace('/\./', '-', $post_date_end);
                 $current_time = getdate();
                 $sub_year = substr($current_time['year'], 2, 2);
                 $post_date_end = preg_replace('/-'.$sub_year.'/', '-20'.$sub_year, $post_date_end);
                 $post_date_end_sec = strtotime($post_date_end);
-                
-                
-                $end_time = $post_date_end_sec + 21 * 60 * 60;
-                /*if( preg_match("/^[0-9]+$/", $post_end_date))
-				{
-                    $end_time =  $post_end_date - ($post_end_date % 86400) - 4 * 60 * 60;//is it true?;
-                    $end_time += 21 * 60 * 60;
-                }*/
+                */
+				
+                $end_time = $post_date_end_sec + 21 * 60 * 60; //for test
+                //$end_time = $post_date_end_sec + 13 * 60 * 60 + 48*60;
+				
                 
 				$log_string = 'item_name: `'.$post_item_name.'`, min_bet: `'.$post_min_bet.'`, end_date: `'.date('d-m-y H:i:s', $end_time).'`, step_bet: `'.$post_step_bet.'`\'';
 		
 				$is_error = false;
-				if($post_item_name == '')
+				if(count($post_item_selected_id['name']) < 1)
 				{
-					$this->Show_message('Название предмета не должно быть пустым!', 'Ошибка', 'red');
+					$this->Show_message('Нужно выбрать предмет!', 'Ошибка', 'red');
                     $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_OPEN_NAME_NULL , $current_time[0], $user_id, '\''.$log_string);
 					$is_error = true;
 				}
+				if(count($post_item_selected_id['name']) > 1)
+				{
+					$this->Show_message('Нужно выбрать только один предмет!', 'Ошибка', 'red');
+                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_OPEN_NAME_NULL , $current_time[0], $user_id, '\''.$log_string);
+					$is_error = true;
+				}
+				
 				if( !preg_match("/^[0-9]+$/", $post_min_bet))
 				{
 					$this->Show_message('Минимальная ставка не должна быть пустой и должна быть числом!', 'Ошибка', 'red');
@@ -254,7 +283,8 @@ class listcharacters extends page_generic {
 				
 				if($is_error)
 				{
-					$data = array($post_item_name, $post_min_bet, $post_date_end_save, $post_step_bet);
+					$data = array($post_item_id, $post_min_bet, $post_date_end_save, $post_step_bet);
+					
 					$page .= $this->Create_page_create_new_auc_page($data);
 				}
 				else
@@ -427,6 +457,7 @@ class listcharacters extends page_generic {
 					}
 					$this->db->query($query);
                     $this->pdc->cleanup();
+					//$this->pdc->del('pdh_item_table');
 					$this->Show_message('Лот закрыт!', 'Успешно', 'green');
 				}
 			}
@@ -483,13 +514,13 @@ class listcharacters extends page_generic {
 				if($post_new_bet_value < $sql_post_lot_id_info['min_bet'])
 				{
 					$this->Show_message('Ставка меньше минимальной!', 'Ошибка', 'red');
-                    $this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_SEND_LOT_NOT_CLOSE , $current_time[0], $user_id, $log_string);
+                    $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_SMALL_THAN_MIN , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if($post_new_bet_value % $sql_post_lot_id_info['step_bet'] != 0)
 				{
 					$this->Show_message('Ставка должна быть кратна '.$sql_post_lot_id_info['step_bet'].'!', 'Ошибка', 'red');
-                    $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_SMALL_THAN_MIN , $current_time[0], $user_id, $log_string);
+                    $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_NOT_MOD_STEP , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				if($post_member_id == '')
@@ -507,7 +538,7 @@ class listcharacters extends page_generic {
 				
 				if($max_bet['value'] > $post_new_bet_value)
 				{
-					$this->Show_message('Ваша ставка меньше максимальной!', 'Ошибка', 'red');
+					$this->Show_message('Ваша ставка меньше текущей!', 'Ошибка', 'red');
                     $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_SMALL_THAN_MAX , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
@@ -516,7 +547,9 @@ class listcharacters extends page_generic {
 										
 					if($sql_post_lot_id_info['end_time'] - $current_time[0] < 10 * 60)
 					{
-						$new_end_time = $current_time[0] + 10 * 60;
+						$new_end_time = $current_time[0] + 10 * 60; //for test
+						//$new_end_time = $current_time[0] + 60;
+						
 						$query = "UPDATE __auction_main SET end_time=".$new_end_time." WHERE lot_id=".$sql_post_lot_id_info['lot_id'];
 						$this->db->query($query);
                         $this->Log_add_event(self::LOG_LOT_UDDATE_BY_BET_NEAR_END_TIME , $current_time[0], $user_id, $log_string);
@@ -534,12 +567,31 @@ class listcharacters extends page_generic {
 					$this->Show_message('Ставка успено сделана!', 'Успешно', 'green');
                     $this->Log_add_event(self::LOG_LOT_NEW_BET_BY_USER , $current_time[0], $user_id, $log_string);
 					
+					
+					
 					// for view "My bets"
 					$action_name = '';
 					
 					// for view actual bet's data
 					$max_bets = $this->Get_max_bets();
 					$my_bets = $this->Get_my_bets($user_id);
+					//recall
+					
+					$member_dkp_block = 0;
+		
+					$col = count($open_lots);
+					$user_char = $this->Get_user_mainchar($user_id);
+					for($i = 0; $i < $col; $i++)
+					{
+						foreach($max_bets as $key => $max_bet)
+						{
+							if($key == $open_lots[$i])
+							{
+								if($max_bet['member_id'] == $user_char)
+									$member_dkp_block += $max_bet['value'];
+							}
+						}
+					}
 				}
 				else
 				{
@@ -661,9 +713,9 @@ class listcharacters extends page_generic {
 					';
 					
 
-					$page .= '<label>'.$this->Get_member_name($user_char['member']).'</label>';
+					$page .= '<label>'.$this->Get_member_name($user_char).'</label>';
 					
-					$current_points = $this->Get_current_points($user_char['member_id']);					
+					$current_points = $this->Get_current_points($user_char);					
 					$available_points = $current_points - $member_dkp_block;
 					
 					
@@ -795,6 +847,8 @@ class listcharacters extends page_generic {
         
         if($action_name == 'edit_items')
         {
+			
+		
             if(! $is_user_admin)
 			{
 				$this->Show_message('Доступно только администраторам!', 'Ошибка', 'red');
@@ -803,21 +857,84 @@ class listcharacters extends page_generic {
             else
             { 
                 
-                $item_names = $this->Get_items();
+                $items = $this->Get_items();
                 
-                foreach($item_names as $key => $item_name)
+				$page .= '<br><br>
+				<fieldset class="settings smallsettings">
+				<legend>Итемы</legend>
+						<dl>
+							<form method="post" action="./auction.php" name="post1">
+								<input type="hidden" name="action_name" value="edit_item_add_item" class="input" />
+								<input type="submit" name="button" value="Создать предмет" class="mainoption bi_new" />
+							</form>
+							<br>
+							<table width="100%" border="0" cellspacing="1" cellpadding="2" class="colorswitch">
+								<tr>
+									<th >Название</th>
+									<th >Минимальная ставка</th>
+									<th>Картинка</th>
+									<th>Действие</th>
+								</tr>
+				';
+                foreach($items as $key => $item_name)
                 {
-                    $page .= '&nbsp&nbsp&nbsp<a href="#" onclick="javascript: document.form_bets'.$key.'.submit()" style="color: '.$color.'">'.$item_name['item_name'].'</a>
-                                <form name="form_bets'.$key.'" action="./auction.php" method="post">
-										<input type="hidden" name="action_name" value="edit_item" />
+				
+				
+							
+				
+					$is_image_exist = file_exists('./item_images/'.$key);
+                    $page .= '<tr><td>
+							';
+					if($is_image_exist)
+						$page .= '<a href="#" onclick="javascript: document.form_bets'.$key.'.submit()" style="color: '.$color.'" class="qtip_item" data-image="./item_images/'.$key.'">'.$item_name['item_name'].'</a>';
+					else	
+						$page .= '<a href="#" onclick="javascript: document.form_bets'.$key.'.submit()" style="color: '.$color.'">'.$item_name['item_name'].'</a>';
+					$page .= '					
+								<form name="form_bets'.$key.'" action="./auction.php" method="post">
+										<input type="hidden" name="action_name" value="edit_item_update_item" />
 										<input type="hidden" name="item_id" value="'.$key.'" />
 								</form>
-                                <br>';
+                                </td>
+								<td>
+									'.$item_name['item_min_bet'].'
+								</td>
+								<td>
+									'.($is_image_exist ? 'Есть' : 'Нет').'
+                    
+								</td>
+								<td>
+									 <form enctype="multipart/form-data" method="post" action="./auction.php" name="post">
+										<input type="hidden" name="MAX_FILE_SIZE" value="500000" />
+										<input name="item_image" type="file" />
+										<input type="hidden" name="action_name" value="edit_item_add_image" class="input" />
+										<input type="hidden" name="item_id" value="'.$key .'" class="input" />
+										<input type="submit" name="button" value="'.($is_image_exist ? 'Обновить' : 'Добавить' ).' изображение" class="mainoption bi_ok" />
+									</form>
+								
+								
+								'.
+								($is_image_exist 
+									? 
+										'
+											
+												 <form enctype="multipart/form-data" method="post" action="./auction.php" name="post">
+													<input type="hidden" name="action_name" value="edit_item_delete_image" class="input" />
+													<input type="hidden" name="item_id" value="'.$key .'" class="input" />
+													<input type="submit" name="button" value="Удалить изображение" class="mainoption bi_delete" />
+												</form>
+											
+										'
+									: ''
+								)								
+								.'
+								</td>
+								</tr>';
                                 
                 }
-                $page .= '<br><br>';
+                $page .= '</table></dl></fieldset>';
             }
         }
+		/*
         if($action_name == 'edit_item')
         {
             if(! $is_user_admin)
@@ -862,6 +979,165 @@ class listcharacters extends page_generic {
                 
             }
         }
+		*/
+		if($action_name == 'edit_item_add_item' || $action_name == 'edit_item_update_item')
+		{
+			if(! $is_user_admin)
+			{
+				$this->Show_message('Доступно только администраторам!', 'Ошибка', 'red');
+                $this->Log_add_event(self::LOG_EVENT_TRY_EDIT_ITEM_BY_NOT_ADMIN , $current_time[0], $user_id);
+			}
+			else
+			{
+				$is_update = false;
+				if($action_name == 'edit_item_update_item')
+					$is_update = true;
+				
+					
+				if($is_update)
+				{
+					$items = $this->Get_items();
+					$post_item_id = $this->in->get('item_id','');
+				}
+				$page .= '
+						<form enctype="multipart/form-data" method="post" action="./auction.php" name="post">
+							<fieldset class="settings smallsettings">
+							<legend>'.($is_update ? 'Редактирование предмета' : 'Новый предмет').'</legend>
+								<dl>
+									<dt><label>Название предмета:</label></dt>
+									<dd><input name="item_name" type="text" class="input" value="'.($is_update ? $items[$post_item_id]['item_name'] : '').'" size="100" id="item_name" /></dd>
+									
+								</dl>
+								<dl>
+									<dt><label>Изображение предмета:</label></dt>
+									<dd>
+										<input type="hidden" name="MAX_FILE_SIZE" value="500000" />
+										<input name="item_image" type="file" />
+									</dd>
+								</dl>
+								<dl>
+									<dt><label>Минимальная ставка:</label></dt>
+									<dd>
+										<input name="item_min_bet" type="text" class="input" value="'.($is_update ? $items[$post_item_id]['item_min_bet'] : '10').'" size="10"/>
+									</dd>
+								</dl>
+								<dl><dk><input type="submit" name="button" value="'.($is_update ? 'Редактировать' : 'Создать').' предмет" class="mainoption bi_ok" /></dl>
+							</fieldset>
+							'.
+							($is_update ?
+								'<input type="hidden" name="action_name" value="edit_item_update_item_1" class="input" />
+								 <input type="hidden" name="item_id" value="'.$post_item_id.'" class="input" />'
+								:
+								'<input type="hidden" name="action_name" value="edit_item_add_item_1" class="input" />'
+							)
+							.'
+							
+						</form>
+					'.$this->jquery->Autocomplete('item_name', array_unique($this->Get_items_names())).'	
+					';	
+				//$page .= $this->jquery->Autocomplete('item_name', array_unique($this->Get_items_names()));
+			}
+		}
+		
+		if($action_name == 'edit_item_add_item_1' || $action_name == 'edit_item_update_item_1')
+		{
+			if(! $is_user_admin)
+			{
+				$this->Show_message('Доступно только администраторам!', 'Ошибка', 'red');
+                $this->Log_add_event(self::LOG_EVENT_TRY_EDIT_ITEM_BY_NOT_ADMIN , $current_time[0], $user_id);
+			}
+			else
+			{
+				$post_item_name = $this->in->get('item_name','');
+				$post_min_bet = $this->in->get('item_min_bet','');
+				$post_item_id = $this->in->get('item_id','');
+				
+				$is_update = false;
+				if($action_name == 'edit_item_update_item_1')
+					$is_update = true;
+					
+				if($post_item_name == '')
+				{
+					$this->Show_message('Имя предмет не должно быть пустым!', 'Ошибка', 'red');
+                    //$this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_VALUE_INVALID , $current_time[0], $user_id, $log_string);
+					$is_error = true;
+				}
+				if( !preg_match("/^[0-9]+$/", $post_min_bet))
+				{
+					$this->Show_message('Минимальная ставка не должна быть пустой и должна быть числом!', 'Ошибка', 'red');
+                    //$this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_OPEN_MIN_BET_INVALID , $current_time[0], $user_id, '\''.$log_string);
+					$is_error = true;
+				}
+				
+				if( (!preg_match("/^[0-9]+$/", $post_item_id)) && $is_update)
+				{
+					$this->Show_message('Предмет не выбран', 'Ошибка', 'red');
+                    //$this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_OPEN_MIN_BET_INVALID , $current_time[0], $user_id, '\''.$log_string);
+					$is_error = true;
+				}
+				
+				if(!$is_error)
+				{
+					$is_error = false;
+					
+					if($is_update)
+					{
+						$query = "UPDATE __auction_items SET
+									item_name='".$post_item_name."',
+									item_min_bet=".$post_min_bet." 
+									where item_id=".$post_item_id;
+						$this->db->query($query);
+						$this->Show_message('Предмет обновлен!', 'Успешно', 'green');
+					}
+					else
+					{
+						if($this->Get_item_id($post_item_name) != -1)
+						{
+							$this->Show_message('Предмет с таким именем уже есть!', 'Ошибка', 'red');
+							$is_error = true;
+						}
+						if(!$is_error)
+						{
+							$query = "INSERT INTO __auction_items 
+										(item_name, item_min_bet)
+										VALUES('$post_item_name', $post_min_bet)"; 
+							$res = $this->db->query($query);
+							
+							$query = "SELECT item_id FROM __auction_items ORDER BY item_id DESC LIMIT 1";
+							$res = $this->db->query($query);
+							$row = $this->db->fetch_row($res,true);
+							$this->Show_message('Предмет создан!', 'Успешно', 'green');
+							$post_item_id = $row['item_id'];
+						}
+					}
+					$is_image_exist = file_exists('./item_images/'.$post_item_id);
+					$uploaddir = './item_images/';
+					$uploadfile = $uploaddir . $post_item_id;
+					if($_FILES['item_image']['tmp_name'])
+					{
+						if(! move_uploaded_file($_FILES['item_image']['tmp_name'], $uploadfile))
+						{
+							$this->Show_message('Не удалось загрузить избражение!', 'Ошибка', 'red');
+							
+							//$this->Log_add_event(self::LOG_ERROR_ADMIN_LOT_OPEN_UPLOAD_FILE_FAIL , $current_time[0], $user_id);
+						}
+						else
+						{
+							//$this->pfh->thumbnail('./item_images/3.png', './item_images/', '123.png', 140);
+							$this->Show_message('Удалось загрузить избражение!', 'Ошибка', 'green');
+						}
+					}
+					else
+					{
+						if($is_update && (!$is_image_exist))
+							$this->Show_message('Файл не выбран или слишком большой!', 'Ошибка', 'red');
+					}
+					
+				}
+			}
+			
+		}
+				
         
         if($action_name == 'edit_item_add_image')
         {
@@ -885,11 +1161,37 @@ class listcharacters extends page_generic {
                     }
                     else
                     {
-                        $this->Show_message('Удалось загрузить избражение!', 'Ошибка', 'green');
+                        $this->Show_message('Удалось загрузить избражение!', 'Успешно', 'green');
                     }
                 }
+				else
+				{
+					$this->Show_message('Файл не выбран или слишком большой!', 'Ошибка', 'red');
+				}
             }
         }
+		if($action_name == 'edit_item_delete_image')
+        {
+            if(! $is_user_admin)
+			{
+				$this->Show_message('Доступно только администраторам!', 'Ошибка', 'red');
+                $this->Log_add_event(self::LOG_EVENT_TRY_EDIT_ITEM_BY_NOT_ADMIN , $current_time[0], $user_id);
+			}
+			else
+			{
+				$post_item_id = $this->in->get('item_id','');
+				$this->pfh->Delete('./item_images/'.$post_item_id);
+				$this->Show_message('Избражение удалено!', 'Успешно', 'green');
+			}
+			
+		}
+		session_start();
+		if($action_name == 'change_lots_to_show')
+		{
+			$_SESSION['lots_to_show'] = $this->in->get('lots_to_show','');
+			$action_name = '';
+		}
+		
 		
 		// user panel
 		if ($is_user_char){
@@ -897,9 +1199,17 @@ class listcharacters extends page_generic {
 			
 			if($action_name == '')
 			{
+				
+				$char = $this->Get_user_mainchar($user_id);
 				$user_panel = '
 					<fieldset class="settings smallsettings">
 					<legend>Мои ставки</legend>
+						<dl>
+							<form name="post" action="./auction.php" method="post">
+								<input type="submit" value="Обновить" class="mainoption"/>
+							</form>
+							Доступно ДПК: '.($this->Get_current_points($char) - $member_dkp_block).'
+						</dl>
 						<dl>
 							<table width="100%" border="0" cellspacing="1" cellpadding="2" class="colorswitch">
 								<tr>
@@ -911,7 +1221,7 @@ class listcharacters extends page_generic {
 				';
 				$i = count($my_bets);
 				
-				$char = $this->Get_user_mainchar($user_id);
+				if(is_array($my_bets))
 				foreach($my_bets as $key => $my_bet)
 				{
 				
@@ -1016,7 +1326,7 @@ class listcharacters extends page_generic {
 		$page .= '<br><br>';
 		//$page .= 'Memory by page: '.memory_get_usage();
 	
-		$page .= "<br><br><br><div align=center>Auction DKP 0.1.2 by Unfog</div>";
+		$page .= "<br><br><br><div align=center>Auction DKP 0.1.3 by Unfog</div>";
 		
 		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		
@@ -1066,21 +1376,44 @@ class listcharacters extends page_generic {
             $data[2] = $current_time['mday'].'.'.($current_time['mon'] < 10?'0':'').($current_time['mon']).'.'.substr($current_time['year'], 2, 2);
         }
 		//<input name="item_name" type="text" class="input" value="'.$data[0].'" size="50" id="name" />
-        $item_names = $this->pdh->aget('item', 'name', 0, array($this->pdh->get('item', 'id_list'))); 
+        //$item_names = $this->pdh->aget('item', 'name', 0, array($this->pdh->get('item', 'id_list'))); 
+		//$item_names = $this->Get_items_names();
+		$items = $this->Get_items_names();
+		
+		$item_names = array();		
+		foreach($items as $item)
+		{
+			array_push($item_names, $item.' ('.$this->Get_item_min_bet($item).')');
+		}
+		
+		$options_multiselect['width'] = 500;
+		$options_multiselect['single_select'] = true;
+		$options_multiselect['filter'] = true;
 		$result .= '
 		
         
-		<form method="post" action="./auction.php" name="post">
+		
 			<fieldset class="settings smallsettings">
 			<legend>Создание нового лота</legend>
 				<dl>
-					<dt><label>Название предмета:</label></dt>
-						<dd><input name="name" type="text" class="input" value="" size="100" id="name" /></dd>
+					<form method="post" action="./auction.php" name="post">
+						<input type="hidden" name="action_name" value="edit_item_add_item" class="input" />
+						<input type="submit" name="button" value="Создать предмет" class="mainoption bi_new" />
+					</form>
 				</dl>
+		<form method="post" action="./auction.php" name="post">
 				<dl>
+					<dt><label>Название предмета (мин. ставка):</label></dt>
+						<dd>'.$this->jquery->MultiSelect('name', array_unique($item_names), ($data[0] == 0 ?  -1 : $data[0]), $options_multiselect).'
+						
+							
+						</dd>
+				</dl>';
+				/*<dl>
 					<dt><label>Минимальная ставка</label></dt>
 					<dd><input type="text" name="min_bet" value="'.($data[1] == 0 ? 10 : $data[1]).'" class="input" /></dd>
-				</dl>
+				</dl>*/
+		$result .= '		
 				<dl>
 					<dt><label>Шаг ставки</label></dt>
 					<dd><input type="text" name="step_bet" value="'.($data[3] == 0 ? 5 : $data[3]).'" class="input" /></dd>
@@ -1112,7 +1445,9 @@ class listcharacters extends page_generic {
 					 
 				</dl>
         */
-        $result .= $this->jquery->Autocomplete('name', array_unique($item_names));
+        //$result .= $this->jquery->Autocomplete('name', array_unique($item_names));
+		//$result .= $this->jquery->MultiSelect('name', array_unique($item_names), '');
+		//<input name="name" type="text" class="input" value="" size="100" id="name" />
 		return $result;
 	}
 	
@@ -1123,8 +1458,35 @@ class listcharacters extends page_generic {
 		$query = "SELECT * FROM __auction_main ORDER BY lot_id DESC"; 
 		$res = $this->db->query($query);
 		
+		$lots_to_show = 10;
+		if(isset($_SESSION['lots_to_show']))
+			$lots_to_show = $_SESSION['lots_to_show'];
+			
+		/*
+        
+        	<label><input type="checkbox" name="show_all_lots" '.($show_all ? '' : 'checked="yes"').' onclick="javascript: document.form_show_all.submit()"/>Показывать только открытые лоты</label><br>
+			'.($show_all ? '<input type="hidden" name="action_name" value="show_all_dis" class="input" />'
+						 :'<input type="hidden" name="action_name" value="show_all_ena" class="input" />').'
+        */
+        
 		$result .= '
-	
+        
+        <fieldset class="settings smallsettings">
+            <legend>Лоты</legend>
+        
+		<form method="post" action="./auction.php" name="form_show_all">
+            Отображать лоты со статусом:&nbsp&nbsp&nbsp
+            <select name="lots_to_show" onchange="javascript: document.form_show_all.submit()">
+                <option value="10" '.($lots_to_show == 10 ? 'selected': '').'>Все</option>
+                <option value="0"  '.($lots_to_show == 0  ? 'selected': '').'>'.$this->Get_status_text(0).'</option>
+                <option value="1"  '.($lots_to_show == 1  ? 'selected': '').'>'.$this->Get_status_text(1).'</option>
+                <option value="2"  '.($lots_to_show == 2  ? 'selected': '').'>'.$this->Get_status_text(2).'</option>
+                <option value="3"  '.($lots_to_show == 3  ? 'selected': '').'>'.$this->Get_status_text(3).'</option>
+                <option value="4"  '.($lots_to_show == 4  ? 'selected': '').'>'.$this->Get_status_text(4).'</option>
+            </select>
+            <input type="hidden" name="action_name" value="change_lots_to_show" class="input" />
+		</form>
+		
 		<table width="100%" border="0" cellspacing="1" cellpadding="2" class="colorswitch">
 			<tr >
 				<th colspan="7" align="left" class="nowrap">Список лотов</th>
@@ -1141,6 +1503,14 @@ class listcharacters extends page_generic {
 		';
 		while ($row = $this->db->fetch_row($res,true)) 
 		{ 
+			if($lots_to_show != 10)
+			{
+				if($row['status'] != 0 && $lots_to_show == 0) continue;
+                if($row['status'] != 1 && $lots_to_show == 1) continue;
+                if($row['status'] != 2 && $lots_to_show == 2) continue;
+                if($row['status'] != 3 && $lots_to_show == 3) continue;
+                if($row['status'] != 4 && $lots_to_show == 4) continue;
+			}
 			$row_max = $_max_bets[$row['lot_id']];
 			if($row_max['value'] > 0 )
 					$date_bet = date('d-m-y H:i:s', $row_max['date']);
@@ -1150,14 +1520,25 @@ class listcharacters extends page_generic {
 			$start_time = date('d-m-y H:i:s', $row['start_time']);
 			$end_time = date('d-m-y H:i:s', $row['end_time']);
 		
-			$result .= '<tr>';
+			$item_id = $this->Get_item_id($row['item_name']);
+			$is_image_exist = file_exists('./item_images/'.$item_id);
+		
+					
+		
+		
+			$result .= '<tr onmouseover="this.style.backgroundColor=\'#295D8C\'" onmouseout="this.style.backgroundColor=\''.$this->style['tr_color1'].'\'">';
 			$result .= '<td>'.$start_time.'</td>';	
-			$result .= '<td><a href="#" onclick="javascript: document.form'.$row['lot_id'].'.submit()">'.$row['item_name'].'</a></td>';	
+			//$result .= '<td><a href="#" onclick="javascript: document.form'.$row['lot_id'].'.submit()">'.$row['item_name'].'</a></td>';	
+			if($is_image_exist)
+				$result .= '<td><a href="#" onclick="javascript: document.form'.$row['lot_id'].'.submit()"  class="qtip_item" data-image="./item_images/'.$item_id.'">'.$row['item_name'].'</a></td>';
+			else	
+				$result .= '<td><a href="#" onclick="javascript: document.form'.$row['lot_id'].'.submit()" >'.$row['item_name'].'</a></td>';
+			
 			$result .= '<td>'.$row_max['value'].'</td>';	
 			$result .= '<td>'.$this->Get_member_name($row_max['member_id']).'</td>';	
 			$result .= '<td>'.$date_bet.'</td>';	
 			$result .= '<td>'.$end_time.'</td>';	
-			$result .= '<td>'.$this->Get_status_text($row['status']).'</td>';	
+			$result .= '<td><font color="'.$this->Get_status_color($row['status']).'">'.$this->Get_status_text($row['status']).'</font></td>';	
 			$result .= '</tr>';
 			$result .= '<form name="form'.$row['lot_id'].'" action="./auction.php" method="post">
 							<input type="hidden" name="action_name" value="view_lot" />
@@ -1168,7 +1549,10 @@ class listcharacters extends page_generic {
 		}
 		$this->db->free_result($res);
 		
-		$result .= '</table>';
+		$result .= '
+        </table>
+         </fieldset>
+        ';
 		return $result;
 	}
 	
@@ -1217,6 +1601,8 @@ class listcharacters extends page_generic {
 	{
 		//$this->db->query("DROP TABLE eqdkp10_auction_main");
 		//$this->db->query("DROP TABLE eqdkp10_auction_bets");
+		//$this->db->query("DROP TABLE eqdkp10_auction_log");
+		//$this->db->query("DROP TABLE eqdkp10_auction_items");
 		$query = "create table IF NOT EXISTS __auction_main 
 			(
 				lot_id 				int 			unsigned not null auto_increment,
@@ -1249,7 +1635,18 @@ class listcharacters extends page_generic {
 				user_id 			int 			unsigned not null,
 				date 				int 			unsigned not null,
 				event 				int 			unsigned not null,
+				description			text			,
 				primary key (log_id)
+			)
+		";
+		$this->db->query($query);
+		
+		$query = "create table IF NOT EXISTS __auction_items 
+			(
+				item_id 			int 			unsigned not null auto_increment,
+				item_name 			varchar(100)	not null,
+				item_min_bet		int				unsigned not null,
+				primary key (item_id)
 			)
 		";
 		$this->db->query($query);
@@ -1351,9 +1748,23 @@ class listcharacters extends page_generic {
 		if($_status_int == 4)
 			return 'Отправлено';
 		return false;	
-		
 	}
 
+	private function Get_status_color($_status_int)
+	{
+		if($_status_int == 0)
+			return 'green';
+		if($_status_int == 1)
+			return 'red';
+		if($_status_int == 2)
+			return 'red';
+		if($_status_int == 3)
+			return 'red';
+		if($_status_int == 4)
+			return 'orange';
+		return false;	
+	}
+	
 	private function filter_view_list($filter_string, $view_list){
 		if($filter_string != '' && $filter_string != 'none'){
 			list($filter, $params) = explode(":", $filter_string);
@@ -1461,33 +1872,80 @@ class listcharacters extends page_generic {
     
     private function Get_items()
     {
-        $query = "SELECT item_name, MIN( item_id ) AS item_id FROM  __items GROUP BY item_name";
+        $query = "SELECT item_id, item_name, item_min_bet FROM  __auction_items ORDER BY item_name";
         $res = $this->db->query($query);
         $result = array();
         while ($row = $this->db->fetch_row($res,true)) 
 		{
             $result[$row['item_id']]['item_name'] = $row['item_name'];
+			$result[$row['item_id']]['item_min_bet'] = $row['item_min_bet'];
         }
+		$this->db->free_result($res);
+        return $result;
+    }
+	
+	private function Get_items_names()
+    {
+        $query = "SELECT item_name FROM  __auction_items ORDER BY item_name";
+        $res = $this->db->query($query);
+        $result = array();
+        while ($row = $this->db->fetch_row($res,true)) 
+		{
+            array_push($result, $row['item_name']);
+        }
+		$this->db->free_result($res);
+        return $result;
+    }
+	
+	private function Get_item_min_bet($_item_name)
+	{
+		$query = "SELECT item_min_bet FROM  __auction_items WHERE item_name='".$_item_name."'";
+        $res = $this->db->query($query);
+        if ($row = $this->db->fetch_row($res,true)) 
+		{
+            $result = $row['item_min_bet'];
+        }
+		else
+		{
+			$result = -1;
+		}
+		$this->db->free_result($res);
+        return $result;
+	}
+	
+	private function Get_item_name($_item_id)
+    {
+        $query = "SELECT item_name FROM  __auction_items WHERE item_id=".$_item_id;
+        $res = $this->db->query($query);
+        if ($row = $this->db->fetch_row($res,true)) 
+		{
+            $result = $row['item_name'];
+        }
+		else
+		{
+			$result = -1;
+		}
+		$this->db->free_result($res);
+        return $result;
+    }
+	
+	private function Get_item_id($_item_name)
+    {
+        $query = "SELECT item_id FROM  __auction_items WHERE item_name='".$_item_name."'";
+        $res = $this->db->query($query);
+        if ($row = $this->db->fetch_row($res,true)) 
+		{
+            $result = $row['item_id'];
+        }
+		else
+		{
+			$result = -1;
+		}
+		$this->db->free_result($res);
         return $result;
     }
     
-    private function Get_item_id($_item_name)
-    {
-        
-        $query = "SELECT item_name, min(item_id) as item_id FROM `eqdkp10_items` where item_name='".$_item_name."'"; 
-
-		$res = $this->db->query($query);
-		if($row = $this->db->fetch_row($res,true) )
-		{
-			$this->db->free_result($res);
-			return $row['item_id'];
-		}
-		else
-		{
-			$this->db->free_result($res);
-			return -1;
-		}
-    }
+    
 }
 if(version_compare(PHP_VERSION, '5.3.0', '<')) registry::add_const('short_listcharacters', listcharacters::__shortcuts());
 registry::register('listcharacters');
