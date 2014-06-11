@@ -132,7 +132,7 @@ class listcharacters extends page_generic {
                                 '`, item_name: `'.$row['item_name'].
                                 '`, max_bet: `'.$max_bet['value'].
                                 '`, member: `'.$max_bet['member'].
-                                '`, end_date: `'.date('d-m-y H:i:s', $current_time[0]).
+                                '`, end_date: `'.$this->Format_date_utc_to_string($current_time[0]).
                                 '`\'';
 				if(is_array($max_bet))
 				{
@@ -241,11 +241,11 @@ class listcharacters extends page_generic {
                 $post_date_end_sec = strtotime($post_date_end);
                 */
 				
-                $end_time = $post_date_end_sec + 21 * 60 * 60; //for test
+                $end_time = $post_date_end_sec + 19 * 60 * 60; //for test
                 //$end_time = $post_date_end_sec + 13 * 60 * 60 + 48*60;
 				
                 
-				$log_string = 'item_name: `'.$post_item_name.'`, min_bet: `'.$post_min_bet.'`, end_date: `'.date('d-m-y H:i:s', $end_time).'`, step_bet: `'.$post_step_bet.'`\'';
+				$log_string = 'item_name: `'.$post_item_name.'`, min_bet: `'.$post_min_bet.'`, end_date: `'.$this->Format_date_utc_to_string($end_time).'`, step_bet: `'.$post_step_bet.'`\'';
 		
 				$is_error = false;
 				if(count($post_item_selected_id['name']) < 1)
@@ -655,12 +655,12 @@ class listcharacters extends page_generic {
 								
 				$row_max = $max_bets[$row['lot_id']];
 				if($row_max['value'] > 0 )
-					$date_bet = date('d-m-y H:i:s', $row_max['date']);
+					$date_bet = $this->Format_date_utc_to_string($row_max['date']);
 				else 
 					$date_bet = '';
 			
-				$start_time = date('d-m-y H:i:s', $row['start_time']);
-				$end_time = date('d-m-y H:i:s', $row['end_time']);
+				$start_time = $this->Format_date_utc_to_string($row['start_time']);
+				$end_time = $this->Format_date_utc_to_string($row['end_time']);
 			
 				$page .= '<tr>';
 				$page .= '<td>'.$start_time.'</td>';	
@@ -774,7 +774,7 @@ class listcharacters extends page_generic {
 					
 					while ($row=$this->db->fetch_row($res,true)) 
 					{ 
-						$date = date('d-m-y H:i:s', $row['date']);
+						$date = $this->Format_date_utc_to_string($row['date']);
 						
 				
 						$page .= '<tr>';
@@ -828,7 +828,7 @@ class listcharacters extends page_generic {
             
             while ($row=$this->db->fetch_row($res,true)) 
             { 
-                $date = date('d-m-y H:i:s', $row['date']);
+                $date = $this->Format_date_utc_to_string($row['date']);
                 
         
                 $page .= '<tr>';
@@ -1186,9 +1186,14 @@ class listcharacters extends page_generic {
 			
 		}
 		session_start();
-		if($action_name == 'change_lots_to_show')
+		if($action_name == 'change_lots_to_show_by_status')
 		{
-			$_SESSION['lots_to_show'] = $this->in->get('lots_to_show','');
+			$_SESSION['lots_to_show_by_status'] = $this->in->get('lots_to_show_by_status','');
+			$action_name = '';
+		}
+        if($action_name == 'change_lots_to_show_by_date')
+		{
+			$_SESSION['lots_to_show_by_date'] = $this->in->get('lots_to_show_by_date','');
 			$action_name = '';
 		}
 		
@@ -1238,7 +1243,7 @@ class listcharacters extends page_generic {
 				
 					$user_panel .= '
 						<tr>
-							<th >'.date('d-m-y H:i:s', $my_bet['date']).'</th>
+							<th >'.$this->Format_date_utc_to_string($my_bet['date']).'</th>
 							<th><a href="#" onclick="javascript: document.form_bets'.$key.'.submit()" style="color: '.$color.'">'.$my_bet['item_name'].'</a></th>
 							<th >'.$this->Get_member_name($my_bet['member_id']).'</th>
 							<th ><font color="'.$color.'">'.($is_my_bet_max ? 'Ставка ваша' : 'Ставка перебита' ).'</font></th>
@@ -1326,7 +1331,7 @@ class listcharacters extends page_generic {
 		$page .= '<br><br>';
 		//$page .= 'Memory by page: '.memory_get_usage();
 	
-		$page .= "<br><br><br><div align=center>Auction DKP 0.1.3 by Unfog</div>";
+		$page .= "<br><br><br><div align=center>Auction DKP 0.1.4 by Unfog</div>";
 		
 		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		
@@ -1419,7 +1424,7 @@ class listcharacters extends page_generic {
 					<dd><input type="text" name="step_bet" value="'.($data[3] == 0 ? 5 : $data[3]).'" class="input" /></dd>
 				</dl>
 				<dl>
-					<dt><label>Аукцион будет закончен в 21:00 </label></dt>
+					<dt><label>Аукцион будет закончен в 19:00 </label></dt>
 					<dd>'.$page .= $this->jquery->Calendar('date', $data[2]).'</dd>
 				</dl>
 				
@@ -1455,13 +1460,35 @@ class listcharacters extends page_generic {
 	{
 		$result = '';
 			
-		$query = "SELECT * FROM __auction_main ORDER BY lot_id DESC"; 
-		$res = $this->db->query($query);
 		
-		$lots_to_show = 10;
-		if(isset($_SESSION['lots_to_show']))
-			$lots_to_show = $_SESSION['lots_to_show'];
-			
+		$current_time = getdate();
+		$lots_to_show_by_status = 10;
+		if(isset($_SESSION['lots_to_show_by_status']))
+			$lots_to_show_by_status = $_SESSION['lots_to_show_by_status'];
+            
+        $lots_to_show_by_date = 10;
+		if(isset($_SESSION['lots_to_show_by_date']))
+			$lots_to_show_by_date = $_SESSION['lots_to_show_by_date'];
+		
+        $filter_date = $current_time[0] - $lots_to_show_by_date * 86400;
+        $query = "SELECT * FROM __auction_main";
+        
+        if($lots_to_show_by_date != 0)
+            $query .= " WHERE start_time>".$filter_date;
+        
+        if($lots_to_show_by_date != 0 && $lots_to_show_by_status != 10)
+            $query .= " AND";
+        
+        if($lots_to_show_by_status != 10)
+        {
+            if($lots_to_show_by_date == 0)
+                $query .= " WHERE";
+            $query .= " status=".$lots_to_show_by_status;
+        }
+        
+        $query .= " ORDER BY lot_id DESC"; 
+		$res = $this->db->query($query);
+        
 		/*
         
         	<label><input type="checkbox" name="show_all_lots" '.($show_all ? '' : 'checked="yes"').' onclick="javascript: document.form_show_all.submit()"/>Показывать только открытые лоты</label><br>
@@ -1473,18 +1500,31 @@ class listcharacters extends page_generic {
         
         <fieldset class="settings smallsettings">
             <legend>Лоты</legend>
-        
+        Текущее время: '.$this->Format_date_utc_to_string($current_time[0]).'<br>
 		<form method="post" action="./auction.php" name="form_show_all">
             Отображать лоты со статусом:&nbsp&nbsp&nbsp
-            <select name="lots_to_show" onchange="javascript: document.form_show_all.submit()">
-                <option value="10" '.($lots_to_show == 10 ? 'selected': '').'>Все</option>
-                <option value="0"  '.($lots_to_show == 0  ? 'selected': '').'>'.$this->Get_status_text(0).'</option>
-                <option value="1"  '.($lots_to_show == 1  ? 'selected': '').'>'.$this->Get_status_text(1).'</option>
-                <option value="2"  '.($lots_to_show == 2  ? 'selected': '').'>'.$this->Get_status_text(2).'</option>
-                <option value="3"  '.($lots_to_show == 3  ? 'selected': '').'>'.$this->Get_status_text(3).'</option>
-                <option value="4"  '.($lots_to_show == 4  ? 'selected': '').'>'.$this->Get_status_text(4).'</option>
+            <select name="lots_to_show_by_status" onchange="javascript: document.form_show_all.submit()">
+                <option value="10" '.($lots_to_show_by_status == 10 ? 'selected': '').'>Все</option>
+                <option value="0"  '.($lots_to_show_by_status == 0  ? 'selected': '').'>'.$this->Get_status_text(0).'</option>
+                <option value="1"  '.($lots_to_show_by_status == 1  ? 'selected': '').'>'.$this->Get_status_text(1).'</option>
+                <option value="2"  '.($lots_to_show_by_status == 2  ? 'selected': '').'>'.$this->Get_status_text(2).'</option>
+                <option value="3"  '.($lots_to_show_by_status == 3  ? 'selected': '').'>'.$this->Get_status_text(3).'</option>
+                <option value="4"  '.($lots_to_show_by_status == 4  ? 'selected': '').'>'.$this->Get_status_text(4).'</option>
             </select>
-            <input type="hidden" name="action_name" value="change_lots_to_show" class="input" />
+            <input type="hidden" name="action_name" value="change_lots_to_show_by_status" class="input" />
+		</form>
+        
+        <form method="post" action="./auction.php" name="form_show_by_date">
+            Отображать лоты за период:&nbsp&nbsp&nbsp
+            <select name="lots_to_show_by_date" onchange="javascript: document.form_show_by_date.submit()">
+                <option value="0" '.($lots_to_show_by_date == 10 ? 'selected': '').'>Весь</option>
+                <option value="7" '.($lots_to_show_by_date == 7  ? 'selected': '').'>1 неделя</option>
+                <option value="10"'.($lots_to_show_by_date == 10  ? 'selected': '').'>10 дней</option>
+                <option value="14"'.($lots_to_show_by_date == 14  ? 'selected': '').'>2 недели</option>
+                <option value="28"'.($lots_to_show_by_date == 28  ? 'selected': '').'>4 недели</option>
+                
+            </select>
+            <input type="hidden" name="action_name" value="change_lots_to_show_by_date" class="input" />
 		</form>
 		
 		<table width="100%" border="0" cellspacing="1" cellpadding="2" class="colorswitch">
@@ -1496,49 +1536,64 @@ class listcharacters extends page_generic {
 				<th >Название предмета</th>
 				<th >Текущаяя ставка</th>
 				<th >Кем сделана</th>
-				<th >Когда сделана</th>
+		<!--	<th >Когда сделана</th> -->
 				<th >Дата окончания</th>
+                <th >Осталось времени</th>
 				<th >Статус</th>
 			</tr>
 		';
 		while ($row = $this->db->fetch_row($res,true)) 
 		{ 
-			if($lots_to_show != 10)
+			/*if($lots_to_show_by_status != 10)
 			{
-				if($row['status'] != 0 && $lots_to_show == 0) continue;
-                if($row['status'] != 1 && $lots_to_show == 1) continue;
-                if($row['status'] != 2 && $lots_to_show == 2) continue;
-                if($row['status'] != 3 && $lots_to_show == 3) continue;
-                if($row['status'] != 4 && $lots_to_show == 4) continue;
-			}
+				if($row['status'] != 0 && $lots_to_show_by_status == 0) continue;
+                if($row['status'] != 1 && $lots_to_show_by_status == 1) continue;
+                if($row['status'] != 2 && $lots_to_show_by_status == 2) continue;
+                if($row['status'] != 3 && $lots_to_show_by_status == 3) continue;
+                if($row['status'] != 4 && $lots_to_show_by_status == 4) continue;
+			}*/
 			$row_max = $_max_bets[$row['lot_id']];
 			if($row_max['value'] > 0 )
-					$date_bet = date('d-m-y H:i:s', $row_max['date']);
+					$date_bet = $this->Format_date_utc_to_string($row_max['date']);
 				else 
 					$date_bet = '';
 		
-			$start_time = date('d-m-y H:i:s', $row['start_time']);
-			$end_time = date('d-m-y H:i:s', $row['end_time']);
+			$start_time = $this->Format_date_utc_to_string($row['start_time']);
+			$end_time = $this->Format_date_utc_to_string($row['end_time']);
 		
+            $time_to_end_sec = $row['end_time'] - $current_time[0];
+            if($time_to_end_sec < 0) $time_to_end_sec = 0;
+            $hour = ((int)(($time_to_end_sec % 86400)/3600));
+            $minute = ((int)(($time_to_end_sec %3600)/60));
+            $second = $time_to_end_sec % 60;
+            
+            $hour = ($hour > 0 && $hour < 9) ? '0'.$hour : $hour;
+            $minute = $minute < 9 ? '0'.$minute : $minute;
+            $second = $second < 9 ? '0'.$second : $second;
+            
+            $time_to_end = $this->Days_to_string((int)($time_to_end_sec / 86400)).' '.$hour.':'.$minute.':'.$second;
+            
 			$item_id = $this->Get_item_id($row['item_name']);
 			$is_image_exist = file_exists('./item_images/'.$item_id);
 		
-					
+		
+            //$end_time = preg_replace('/ /', '&nbsp&nbsp&nbsp&nbsp&nbsp', $end_time);
 		
 		
 			$result .= '<tr onmouseover="this.style.backgroundColor=\'#295D8C\'" onmouseout="this.style.backgroundColor=\''.$this->style['tr_color1'].'\'">';
-			$result .= '<td>'.$start_time.'</td>';	
+			$result .= '<td><NOBR>'.$start_time.'</NOBR></td>';	
 			//$result .= '<td><a href="#" onclick="javascript: document.form'.$row['lot_id'].'.submit()">'.$row['item_name'].'</a></td>';	
 			if($is_image_exist)
-				$result .= '<td><a href="#" onclick="javascript: document.form'.$row['lot_id'].'.submit()"  class="qtip_item" data-image="./item_images/'.$item_id.'">'.$row['item_name'].'</a></td>';
+				$result .= '<td><NOBR><a href="#" onclick="javascript: document.form'.$row['lot_id'].'.submit()"  class="qtip_item" data-image="./item_images/'.$item_id.'">'.$row['item_name'].'</a></NOBR></td>';
 			else	
-				$result .= '<td><a href="#" onclick="javascript: document.form'.$row['lot_id'].'.submit()" >'.$row['item_name'].'</a></td>';
+				$result .= '<td><NOBR><a href="#" onclick="javascript: document.form'.$row['lot_id'].'.submit()" >'.$row['item_name'].'</a></NOBR></td>';
 			
-			$result .= '<td>'.$row_max['value'].'</td>';	
-			$result .= '<td>'.$this->Get_member_name($row_max['member_id']).'</td>';	
-			$result .= '<td>'.$date_bet.'</td>';	
-			$result .= '<td>'.$end_time.'</td>';	
-			$result .= '<td><font color="'.$this->Get_status_color($row['status']).'">'.$this->Get_status_text($row['status']).'</font></td>';	
+			$result .= '<td><NOBR>'.$row_max['value'].'</NOBR></td>';	
+			$result .= '<td><NOBR>'.$this->Get_member_name($row_max['member_id']).'</NOBR></td>';	
+			//$result .= '<td><NOBR>'.$date_bet.'</NOBR></td>';	
+			$result .= '<td><NOBR>'.$end_time.'</NOBR></td>';	
+            $result .= '<td><NOBR>'.(($time_to_end_sec == 0 || $row['status'] != 0)? 'Завершен' : $time_to_end).'</NOBR></td>';
+			$result .= '<td><NOBR><font color="'.$this->Get_status_color($row['status']).'">'.$this->Get_status_text($row['status']).'</font></NOBR></td>';	
 			$result .= '</tr>';
 			$result .= '<form name="form'.$row['lot_id'].'" action="./auction.php" method="post">
 							<input type="hidden" name="action_name" value="view_lot" />
@@ -1942,6 +1997,29 @@ class listcharacters extends page_generic {
 			$result = -1;
 		}
 		$this->db->free_result($res);
+        return $result;
+    }
+    
+    private function Format_date_utc_to_string($_date_utc)
+    {
+        $result = date('d-m-y H:i:s', $_date_utc);
+        return preg_replace('/ /', '&nbsp&nbsp&nbsp&nbsp&nbsp', $result);
+    }
+    
+    private function Days_to_string($_days)
+    {
+        $result = ($_days == 0 ? '' : $_days.' ');
+        switch($_days)
+        {
+            case 0: $result .= ''; break;
+            case 1: $result .= ' день'; break;
+            case 2: $result .= ' дня&nbsp&nbsp'; break;
+            case 3: $result .= ' дня&nbsp&nbsp'; break;
+            case 4: $result .= ' дня&nbsp&nbsp'; break;
+            case 5: $result .= ' дней'; break;
+            case 6: $result .= ' дней'; break;
+            default : $result .= 'дней'; break;
+        }
         return $result;
     }
     
