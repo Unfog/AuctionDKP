@@ -183,6 +183,20 @@ class listcharacters extends page_generic {
 			}
 		}
 		
+        $user_dkp = 0;
+        $user_chars = $this->Get_user_chars($user_id);
+        reset($user_chars['member']);
+        reset($user_chars['member_id']);	
+        for($i = 0; $i < count($user_chars['member']); $i++)
+        {
+            $user_dkp += $this->Get_current_points(current($user_chars['member_id']));
+            next($user_chars['member']);
+            next($user_chars['member_id']);
+        }	
+        				
+       
+        
+        
 		$this->jquery->qtip(".qtip_item","
 				 
 				 return '<img src=\"'+$(this).data('image')+'\">';
@@ -482,7 +496,8 @@ class listcharacters extends page_generic {
                                 '`, min_bet: `'.$sql_post_lot_id_info['min_bet'].
                                 '`, max_bet: `'.$max_bet['value'].
                                 '`, member: `'.$this->Get_member_name($post_member_id).
-                                '`, member_dkp_free: `'.($this->Get_current_points($post_member_id) - $member_dkp_block).
+                                '`, member_dkp_free: `'.($user_dkp - $member_dkp_block).
+                                
                                 '`\'';
                 
 				$is_error = false;
@@ -529,7 +544,7 @@ class listcharacters extends page_generic {
                     $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_NO_CHAR , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
-				if($this->Get_current_points($post_member_id) - $member_dkp_block < $post_new_bet_value)
+				if($user_dkp - $member_dkp_block < $post_new_bet_value)
 				{
 					$this->Show_message('У вас нету столько ДКП!', 'Ошибка', 'red');
                     $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_HAVE_NOT_DKP , $current_time[0], $user_id, $log_string);
@@ -715,7 +730,7 @@ class listcharacters extends page_generic {
 
 					$page .= '<label>'.$this->Get_member_name($user_char).'</label>';
 					
-					$current_points = $this->Get_current_points($user_char);					
+					$current_points = $user_dkp;					
 					$available_points = $current_points - $member_dkp_block;
 					
 					
@@ -767,7 +782,7 @@ class listcharacters extends page_generic {
 							<th >Дата ставки</th>
 							<th >Величина</th>
 							<th >Кем сделана</th>
-							<th >Сколько у него ДКП</th>
+							
 						</tr>
 					';
 					
@@ -775,13 +790,12 @@ class listcharacters extends page_generic {
 					while ($row=$this->db->fetch_row($res,true)) 
 					{ 
 						$date = $this->Format_date_utc_to_string($row['date']);
-						
-				
+		
 						$page .= '<tr>';
 						$page .= '<td>'.$date.'</td>';	
 						$page .= '<td>'.$row['value'].'</td>';	
 						$page .= '<td>'.$this->Get_member_name($row['member_id']).'</td>';	
-						$page .= '<td>'.$this->Get_current_points($row['member_id']).'</td>';	
+						//$page .= '<td>'.$user_dkp.'</td>';	
 						
 						
 					}
@@ -1213,7 +1227,7 @@ class listcharacters extends page_generic {
 							<form name="post" action="./auction.php" method="post">
 								<input type="submit" value="Обновить" class="mainoption"/>
 							</form>
-							Доступно ДПК: '.($this->Get_current_points($char) - $member_dkp_block).'
+							Доступно ДПК: '.($user_dkp - $member_dkp_block).'
 						</dl>
 						<dl>
 							<table width="100%" border="0" cellspacing="1" cellpadding="2" class="colorswitch">
@@ -1243,10 +1257,10 @@ class listcharacters extends page_generic {
 				
 					$user_panel .= '
 						<tr>
-							<th >'.$this->Format_date_utc_to_string($my_bet['date']).'</th>
-							<th><a href="#" onclick="javascript: document.form_bets'.$key.'.submit()" style="color: '.$color.'">'.$my_bet['item_name'].'</a></th>
-							<th >'.$this->Get_member_name($my_bet['member_id']).'</th>
-							<th ><font color="'.$color.'">'.($is_my_bet_max ? 'Ставка ваша' : 'Ставка перебита' ).'</font></th>
+							<td >'.$this->Format_date_utc_to_string($my_bet['date']).'</td>
+							<td><a href="#" onclick="javascript: document.form_bets'.$key.'.submit()" style="color: '.$color.'">'.$my_bet['item_name'].'</a></td>
+							<td >'.$this->Get_member_name($my_bet['member_id']).'</td>
+							<td ><font color="'.$color.'">'.($is_my_bet_max ? 'Ставка ваша' : 'Ставка перебита' ).'</font></td>
 						</tr>
 					';
 					
@@ -1331,7 +1345,7 @@ class listcharacters extends page_generic {
 		$page .= '<br><br>';
 		//$page .= 'Memory by page: '.memory_get_usage();
 	
-		$page .= "<br><br><br><div align=center>Auction DKP 0.1.4 by Unfog</div>";
+		$page .= "<br><br><br><div align=center>Auction DKP 0.1.5 by Unfog</div>";
 		
 		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		
@@ -1567,9 +1581,9 @@ class listcharacters extends page_generic {
             $minute = ((int)(($time_to_end_sec %3600)/60));
             $second = $time_to_end_sec % 60;
             
-            $hour = ($hour > 0 && $hour < 9) ? '0'.$hour : $hour;
-            $minute = $minute < 9 ? '0'.$minute : $minute;
-            $second = $second < 9 ? '0'.$second : $second;
+            $hour = ($hour > 0 && $hour < 10) ? '0'.$hour : $hour;
+            $minute = $minute < 10 ? '0'.$minute : $minute;
+            $second = $second < 10 ? '0'.$second : $second;
             
             $time_to_end = $this->Days_to_string((int)($time_to_end_sec / 86400)).' '.$hour.':'.$minute.':'.$second;
             
@@ -1646,7 +1660,15 @@ class listcharacters extends page_generic {
 		return $this->pdh->get('member', 'mainchar', array($_user_id)); 
 	}
 	
-
+    private function Get_user_chars($_user_id)
+	{
+		$result = array();
+		$result['member'] = $this->pdh->aget('member', 'name', 0, array($this->pdh->get('member', 'connection_id', array($_user_id))));
+		$result['member_id']  = $this->pdh->aget('member', 'memberid', 0, array($this->pdh->get('member', 'connection_id', array($_user_id))));
+				
+		return $result;
+	}
+    
 	private function Get_member_name($_member_id)
 	{//must be redone by Get_current_points and delete col 'member' in lot table
 		return $this->pdh->get('member', 'name', array($_member_id));
