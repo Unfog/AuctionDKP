@@ -108,7 +108,7 @@ class listcharacters extends page_generic {
 		$is_user_admin = $this->user->is_signedin() && $this->user->check_auth('a_item_add', false);
 		$is_user_char = $this->user->is_signedin() && $this->user->check_auth('u_userlist', false);
 		
-		// max_bets and $my_bets will be requery when new net was added
+        // max_bets and $my_bets will be requery when new net was added
 		$max_bets = $this->Get_max_bets();
 		$my_bets = $this->Get_my_bets($user_id);
 		
@@ -117,52 +117,50 @@ class listcharacters extends page_generic {
 		
 		//check all lots for close
 		
-		
+		//$current_time[0] += 20 * 24 *3600;
+        
 		$open_lots = array();
-		$res = $this->db->query("SELECT lot_id,item_name,end_time FROM __auction_main WHERE status=0");
+		$res = $this->db->query("SELECT lot_id,item_name,end_time FROM __auction_main WHERE status=0 AND end_time<".$current_time[0]);
 		while($row = $this->db->fetch_row($res,true))
 		{
 			array_push($open_lots, $row['lot_id']);
-			//$current_time[0] += 10 * 24 *3600;
-			if($row['end_time'] < $current_time[0])
-			{
-				$max_bet = $max_bets[$row['lot_id']];
-				$query = "";
-                $log_string =   '\'lot_id: `'.$row['lot_id'].
-                                '`, item_name: `'.$row['item_name'].
-                                '`, max_bet: `'.$max_bet['value'].
-                                '`, member: `'.$max_bet['member'].
-                                '`, end_date: `'.$this->Format_date_utc_to_string($current_time[0]).
-                                '`\'';
-				if(is_array($max_bet))
-				{
-					$query = "update __auction_main set status=1 where lot_id=".$row['lot_id'];
-					//$retu = $this->pdh->put('item', 'add_item', array($row['item_name'], $max_bet['member_id'], false, $row['lot_id'], $max_bet['value'], 2, $row['end_time']));
-						
-                        
-                    $this->pdh->put('item', 'add_item', 
-												array(
-														$row['item_name'],
-														$max_bet['member_id'], 
-														false, 
-														'', //here was lot_id
-														$max_bet['value'], 
-														1, 
-														$row['end_time']));
-					//$this->Show_message('Лот закрыт!', 'Успешно', 'green');
-                    
-		
-                    $this->Log_add_event(self::LOG_LOT_CLOSE_BY_TIME , $current_time[0], $user_id, $log_string);
-				}
-				else
-				{
-					$query = "update __auction_main set status=3 where lot_id=".$row['lot_id'];
-                    $this->Log_add_event(self::LOG_LOT_FAKE_BY_TIME , $current_time[0], $user_id,  $log_string);
-				}
-				$this->db->query($query);
-                $this->pdc->cleanup();
-				//$this->pdc->del('pdh_item_table');
-			}
+			
+			
+            $max_bet = $max_bets[$row['lot_id']];
+            $query = "";
+            $log_string =   '\'lot_id: `'.$row['lot_id'].
+                            '`, item_name: `'.$row['item_name'].
+                            '`, max_bet: `'.$max_bet['value'].
+                            '`, member: `'.$this->Get_member_name($max_bet['member_id']).
+                            '`, end_date: `'.$row['end_time'].
+                            '`\'';
+            if(is_array($max_bet))
+            {
+                $query = "update __auction_main set status=1 where lot_id=".$row['lot_id'];
+                                        
+                $this->pdh->put('item', 'add_item', 
+                                            array(
+                                                    $row['item_name'],
+                                                    $max_bet['member_id'], 
+                                                    false, 
+                                                    '', //here was lot_id
+                                                    $max_bet['value'], 
+                                                    1, //item pool
+                                                    $row['end_time']));
+                //$this->Show_message('Лот закрыт!', 'Успешно', 'green');
+                
+    
+                $this->Log_add_event(self::LOG_LOT_CLOSE_BY_TIME , $current_time[0], $user_id, $log_string);
+            }
+            else
+            {
+                $query = "update __auction_main set status=3 where lot_id=".$row['lot_id'];
+                $this->Log_add_event(self::LOG_LOT_FAKE_BY_TIME , $current_time[0], $user_id,  $log_string);
+            }
+            $this->db->query($query);
+            $this->pdc->cleanup();
+            //$this->pdc->del('pdh_item_table');
+        
 			
 		}
 		$this->db->free_result($res);
@@ -459,7 +457,7 @@ class listcharacters extends page_generic {
 						$log_string =   '\'lot_id: `'.$post_lot_id.
                                         '`, item_name: `'.$sql_post_lot_id_info['item_name'].
                                         '`, max_bet: `'.$max_bet['value'].
-                                        '`, member: `'.$max_bet['member'].'`\'';
+                                        '`, member: `'.$this->Get_member_name($max_bet['member_id']).'`\'';
                         $this->Log_add_event(self::LOG_LOT_CLOSE_BY_USER , $current_time[0], $user_id, $log_string);               
                                       
 					}
@@ -544,14 +542,14 @@ class listcharacters extends page_generic {
                     $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_NO_CHAR , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
-				if($user_dkp - $member_dkp_block < $post_new_bet_value)
+				if(($user_dkp - $member_dkp_block + ($max_bet['member_id'] == $post_member_id ? $max_bet['value'] : 0)) < $post_new_bet_value)
 				{
 					$this->Show_message('У вас нету столько ДКП!', 'Ошибка', 'red');
                     $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_HAVE_NOT_DKP , $current_time[0], $user_id, $log_string);
 					$is_error = true;
 				}
 				
-				if($max_bet['value'] > $post_new_bet_value)
+				if($max_bet['value'] + $sql_post_lot_id_info['step_bet'] > $post_new_bet_value)
 				{
 					$this->Show_message('Ваша ставка меньше текущей!', 'Ошибка', 'red');
                     $this->Log_add_event(self::LOG_ERROR_USER_NEW_BET_SMALL_THAN_MAX , $current_time[0], $user_id, $log_string);
@@ -733,6 +731,10 @@ class listcharacters extends page_generic {
 					$current_points = $user_dkp;					
 					$available_points = $current_points - $member_dkp_block;
 					
+                    if($max_bet['member_id'] == $user_char)
+                    {
+                        $available_points += $max_bet['value'];
+                    }
 					
 					
 					$page .=	'  
@@ -1345,7 +1347,7 @@ class listcharacters extends page_generic {
 		$page .= '<br><br>';
 		//$page .= 'Memory by page: '.memory_get_usage();
 	
-		$page .= "<br><br><br><div align=center>Auction DKP 0.1.5 by Unfog</div>";
+		$page .= "<br><br><br><div align=center>Auction DKP 0.1.6 by Unfog</div>";
 		
 		/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		
@@ -1476,7 +1478,7 @@ class listcharacters extends page_generic {
 			
 		
 		$current_time = getdate();
-		$lots_to_show_by_status = 10;
+		$lots_to_show_by_status = 0;
 		if(isset($_SESSION['lots_to_show_by_status']))
 			$lots_to_show_by_status = $_SESSION['lots_to_show_by_status'];
             
@@ -1512,9 +1514,11 @@ class listcharacters extends page_generic {
         
 		$result .= '
         
+        
+        
         <fieldset class="settings smallsettings">
             <legend>Лоты</legend>
-        Текущее время: '.$this->Format_date_utc_to_string($current_time[0]).'<br>
+        Текущее время: <span id="current_time"></span><br>
 		<form method="post" action="./auction.php" name="form_show_all">
             Отображать лоты со статусом:&nbsp&nbsp&nbsp
             <select name="lots_to_show_by_status" onchange="javascript: document.form_show_all.submit()">
@@ -1527,6 +1531,23 @@ class listcharacters extends page_generic {
             </select>
             <input type="hidden" name="action_name" value="change_lots_to_show_by_status" class="input" />
 		</form>
+        
+        <script language = \'javascript\'>
+          function startTime() {
+            var date = new Date();
+            var hours = date.getHours();
+            var minutes = date.getMinutes();
+            var seconds = date.getSeconds();
+            if (hours < 10) hours = "0" + hours;
+            if (minutes < 10) minutes = "0" + minutes;
+            if (seconds < 10) seconds = "0" + seconds;
+            document.getElementById("current_time").innerHTML = hours + ":" + minutes + ":" + seconds;
+            setTimeout(startTime, 1000);
+          }
+        </script>
+        <script language = \'javascript\'>
+            startTime();
+        </script>
         
         <form method="post" action="./auction.php" name="form_show_by_date">
             Отображать лоты за период:&nbsp&nbsp&nbsp
@@ -1932,7 +1953,7 @@ class listcharacters extends page_generic {
             //events by user error 300..399                  
             case self::LOG_ERROR_USER_NEW_BET_LOT_ID_INVALID        : $result = 'При попытке новой ставки ИД лота не достоверно'; break;        
             case self::LOG_ERROR_USER_NEW_BET_LOT_ID_NOT_FOUND      : $result = 'При попытке новой ставки лот не найден'; break;        
-            case self::LOG_ERROR_USER_NEW_BET_LOT_NOT_OPEN          : $result = 'При попытке новой ставки дот не открыт'; break;        
+            case self::LOG_ERROR_USER_NEW_BET_LOT_NOT_OPEN          : $result = 'При попытке новой ставки лот не открыт'; break;        
             case self::LOG_ERROR_USER_NEW_BET_SMALL_THAN_MIN        : $result = 'При попытке новой ставки она меньше минимальной'; break;        
             case self::LOG_ERROR_USER_NEW_BET_NOT_MOD_STEP          : $result = 'При попытке новой ставки она не кратана шагу'; break;        
             case self::LOG_ERROR_USER_NEW_BET_NO_CHAR               : $result = 'При попытке новой ставки у пользователя нету чара'; break;        
